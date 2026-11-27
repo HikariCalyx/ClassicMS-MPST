@@ -109,11 +109,13 @@ cargo run -p msclassic --example img_demo -- <bundle 目錄>
 cargo run -p msclassic --example export_demo -- <資產路徑> <輸出目錄>
 ```
 
-`src-tauri\examples` 內其餘程式是格式逆向工具，不參與預設
-build、test 或 Clippy。需要時以 `research-tools` feature 執行：
+`src-tauri\examples` 內其餘程式與 `src-tauri\src\bin\index.rs` 的 bundle 掃描工具
+都是格式逆向工具，不參與預設 build、test 或 Clippy，也不會被打包進安裝檔。
+需要時以 `research-tools` feature 執行：
 
 ```powershell
 cargo run -p msclassic --features research-tools --example wzss_hash -- <參數>
+cargo run -p msclassic --features research-tools --bin index -- <bundle 目錄>
 ```
 
 可用 `npm run check:research` 額外以 Clippy `-D warnings` 確認全部研究工具。

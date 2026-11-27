@@ -429,7 +429,7 @@ frame[..][3]          → sprite rect index
 ## 驗證方式
 
 1. `cargo test` — WZJS fixture 測試（`blank` 等樣本硬編在 `wzjs/fixtures.rs`，不依賴遊戲安裝路徑）
-2. `cargo run --bin index -- <game data path>` — 掃出 37 個 bundle 的組成表，跟本文件記錄的數字對得上（7386 / 935 / 1341 …）
+2. `cargo run --features research-tools --bin index -- <game data path>` — 掃出 37 個 bundle 的組成表，跟本文件記錄的數字對得上（7386 / 935 / 1341 …）
 3. `npm run tauri dev` — 開 GUI，導到 `Character/Afterimage/blank`，確認子節點是 `axe / crossBow / mace / …` 九項
 4. 交叉驗證 — 用 Harepacker-MPST 開舊版 WZ 的同一路徑並排比對
 5. 匯出一個子樹，用 `rg` 搜尋確認欄位值合理（例如怪物 `info/speed` 是負數整數）

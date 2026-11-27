@@ -1,7 +1,7 @@
 {
   "name": "msclassic-viewer",
   "private": true,
-  "version": "0.34.3",
+  "version": "0.34.4",
   "description": "新楓之谷：經典版 Unity 資料瀏覽、圖片預覽與 JSON/PNG/XML 匯出工具",
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "check": "npm run check:rust && npm run check:frontend",
     "check:frontend": "npm run build && npm audit --audit-level=high",
     "check:oracle": "cargo check --manifest-path tools/maple-oracle/Cargo.toml --bins",
-    "check:research": "cargo clippy -p msclassic --features research-tools --examples -- -D warnings",
+    "check:research": "cargo clippy -p msclassic --features research-tools --bins --examples -- -D warnings",
     "check:rust": "cargo fmt --all -- --check && cargo clippy -p msclassic --all-targets -- -D warnings && cargo test -p msclassic --all-targets",
     "preview": "vite preview",
     "tauri": "tauri",

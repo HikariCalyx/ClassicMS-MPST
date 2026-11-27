@@ -2,7 +2,7 @@
 //!
 //! 用法：
 //! ```text
-//! cargo run --release --bin index -- <bundle 目錄> [--dump-text <outdir>] [--dump-mono <outdir>]
+//! cargo run --release --features research-tools --bin index -- <bundle 目錄> [--dump-text <outdir>] [--dump-mono <outdir>]
 //! ```
 //! - 預設：每個 bundle 印出 SerializedFile 數量、各 classID 物件統計、
 //!   AssetBundle m_Container 筆數（附前 3 筆路徑樣本）、總解壓大小。

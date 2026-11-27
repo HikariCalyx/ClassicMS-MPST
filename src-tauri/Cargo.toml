@@ -1,6 +1,6 @@
 [package]
 name = "msclassic"
-version = "0.34.3"
+version = "0.34.4"
 edition = "2021"
 description = "新楓之谷：經典版 Unity 資料瀏覽、圖片預覽與 JSON/PNG/XML 匯出工具"
 default-run = "msclassic"
@@ -25,6 +25,9 @@ required-features = ["desktop"]
 [[bin]]
 name = "index"
 path = "src/bin/index.rs"
+# 研究工具，不是 app 的一部分：Tauri 會把每個 bin 都塞進 .app，而 macOS
+# 通用版只 lipo 主執行檔，額外的 bin 會讓打包失敗。
+required-features = ["research-tools"]
 
 [dependencies]
 lz4_flex = "0.11"

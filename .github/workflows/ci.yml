@@ -43,7 +43,7 @@ jobs:
         run: cargo test -p msclassic --all-targets
 
       - name: Lint research tools
-        run: cargo clippy -p msclassic --features research-tools --examples -- -D warnings
+        run: cargo clippy -p msclassic --features research-tools --bins --examples -- -D warnings
 
       - name: Build frontend
         run: npm run build
