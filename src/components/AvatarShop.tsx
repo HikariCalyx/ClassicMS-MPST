@@ -1,6 +1,7 @@
 import { createDatasetCache } from "../locale";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getImage, type EquipItem } from "../api";
+import { useI18n } from "../i18n";
 import type { EquipSlot, PartsState } from "./AvatarPage";
 import {
   dedupeColorVariants,
@@ -10,28 +11,26 @@ import {
 } from "./avatarColor";
 
 // 部位 tab（顯示順序固定）；AvatarEquipPanel 的「目前裝備」清單也用這份順序。
-export const SLOT_TABS: readonly { slot: EquipSlot; label: string }[] = [
-  { slot: "cap", label: "帽子" },
-  { slot: "coat", label: "上衣" },
-  { slot: "longcoat", label: "套服" },
-  { slot: "pants", label: "褲裙" },
-  { slot: "shoes", label: "鞋子" },
-  { slot: "glove", label: "手套" },
-  { slot: "cape", label: "披風" },
-  { slot: "shield", label: "盾牌" },
-  { slot: "weapon", label: "武器" },
-  { slot: "earrings", label: "耳環" },
-  { slot: "faceAcc", label: "臉部飾品" },
-  { slot: "eyeAcc", label: "眼部飾品" },
-  { slot: "hair", label: "髮型" },
-  { slot: "face", label: "臉型" },
+// 部位名稱在 i18n 的 avatar.slot.*，渲染時依介面語言翻譯。
+export const SLOT_TABS: readonly EquipSlot[] = [
+  "cap",
+  "coat",
+  "longcoat",
+  "pants",
+  "shoes",
+  "glove",
+  "cape",
+  "shield",
+  "weapon",
+  "earrings",
+  "faceAcc",
+  "eyeAcc",
+  "hair",
+  "face",
 ];
 
 // 卡片固定高 64px、grid 間距 7px，供列數估算（對齊 .avatar-shop-card / .avatar-shop-grid）。
 const CARD_ROW_PX = 64 + 7;
-
-// slot → 中文部位名（搜尋結果跨部位，卡片上要標示）。
-const SLOT_LABELS = new Map(SLOT_TABS.map(({ slot, label }) => [slot, label]));
 
 // 模糊比對評分（越小越好）：名稱直接包含最優先，其次代碼包含，
 // 最後是字元依序出現（如「楓盾」可中「楓葉盾」）；完全搭不上回 null。
@@ -106,6 +105,7 @@ function AvatarShopCard({
   slotLabel?: string;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const [icon, setIcon] = useState<string | null>(null);
 
   // icon 按頁 lazy：卡片只在當前頁渲染，掛載時才抓圖。
@@ -123,7 +123,7 @@ function AvatarShopCard({
     <button
       type="button"
       className={`avatar-shop-card${worn ? " is-worn" : ""}`}
-      title={`${item.name}（${item.id}）`}
+      title={t("avatar.shop.cardTitle", { name: item.name, id: item.id })}
       onClick={onToggle}
     >
       <span className="avatar-shop-card-icon">{icon ? <img src={icon} alt="" /> : null}</span>
@@ -178,6 +178,7 @@ export function AvatarShop({
   onRemove,
   onPickItem,
 }: AvatarShopProps) {
+  const { t } = useI18n();
   const [activeSlot, setActiveSlot] = useState<EquipSlot>("cap");
   const [page, setPage] = useState(0);
   // 搜尋關鍵字；非空時改為跨全部部位的模糊搜尋，忽略部位 tab。
@@ -234,7 +235,7 @@ export function AvatarShop({
     const q = query.trim();
     if (!q) return null;
     const scored: { item: EquipItem; score: number }[] = [];
-    for (const { slot } of SLOT_TABS) {
+    for (const slot of SLOT_TABS) {
       const pool = itemsBySlot.get(slot) ?? [];
       const filtered = cashOnly ? pool.filter((item) => item.cash) : pool;
       for (const item of dedupeColorVariants(slot, filtered)) {
@@ -269,9 +270,9 @@ export function AvatarShop({
   }, [totalPages]);
 
   return (
-    <section className="avatar-shop" aria-label="裝備列表">
+    <section className="avatar-shop" aria-label={t("avatar.shop.label")}>
       <div className="avatar-shop-tabs" role="tablist">
-        {SLOT_TABS.map(({ slot, label }) => (
+        {SLOT_TABS.map((slot) => (
           <button
             key={slot}
             type="button"
@@ -283,7 +284,7 @@ export function AvatarShop({
               setPage(0);
             }}
           >
-            {label}
+            {t(`avatar.slot.${slot}`)}
           </button>
         ))}
       </div>
@@ -292,7 +293,7 @@ export function AvatarShop({
         <input
           type="search"
           value={query}
-          placeholder="模糊搜尋名稱或代碼…"
+          placeholder={t("avatar.shop.searchPlaceholder")}
           onChange={(event) => {
             setQuery(event.target.value);
             setPage(0);
@@ -300,11 +301,13 @@ export function AvatarShop({
         />
         {query.trim() ? (
           <>
-            <span className="avatar-shop-search-count">{searchItems?.length ?? 0} 件</span>
+            <span className="avatar-shop-search-count">
+              {t("avatar.shop.count", { count: searchItems?.length ?? 0 })}
+            </span>
             <button
               type="button"
               className="avatar-shop-search-clear"
-              aria-label="清除搜尋"
+              aria-label={t("common.clearSearch")}
               onClick={() => {
                 setQuery("");
                 setPage(0);
@@ -320,10 +323,10 @@ export function AvatarShop({
         {pageItems.length === 0 ? (
           <p className="avatar-shop-status">
             {searchItems
-              ? "找不到符合的裝備"
+              ? t("avatar.shop.noMatch")
               : cashOnly
-                ? "此部位沒有點裝"
-                : "此部位沒有裝備"}
+                ? t("avatar.shop.noCashItems")
+                : t("avatar.shop.noItems")}
           </p>
         ) : (
           <div className="avatar-shop-grid" ref={gridRef}>
@@ -342,7 +345,7 @@ export function AvatarShop({
                   key={item.id}
                   item={item}
                   worn={worn}
-                  slotLabel={searchItems ? SLOT_LABELS.get(slot) : undefined}
+                  slotLabel={searchItems ? t(`avatar.slot.${slot}`) : undefined}
                   onToggle={() => {
                     // 點已穿的卡片 → 脫下；否則穿上（同 slot 取代），
                     // 髮型/臉型套用目前選取的顏色。麵包屑跟著顯示該裝備路徑。
@@ -366,7 +369,7 @@ export function AvatarShop({
       </div>
 
       {totalPages > 1 ? (
-        <nav className="avatar-shop-pager" aria-label="裝備分頁">
+        <nav className="avatar-shop-pager" aria-label={t("avatar.shop.pagination")}>
           <button
             type="button"
             disabled={currentPage === 0}

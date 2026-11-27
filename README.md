@@ -40,15 +40,26 @@ npm run tauri dev
 npm run dev
 ```
 
-建立前端與 Windows NSIS 安裝程式：
+建立前端與本機平台的安裝程式：
 
 ```powershell
 npm run build
 npm run tauri build
 ```
 
-Tauri bundle target 固定為已驗證的 NSIS。安裝程式會輸出到
-`target\release\bundle\nsis\`。
+Windows 產出已驗證的 NSIS 安裝程式，位於 `target\release\bundle\nsis\`；macOS
+則由 `src-tauri\tauri.macos.conf.json` 指定產出 `.app` 與 `.dmg`。
+
+## 發佈安裝檔
+
+推送 `vX.Y.Z` tag（需與 `src-tauri/tauri.conf.json` 的版本相同）會觸發
+`.github/workflows/release.yml`，在 GitHub Actions 上分別建置
+`msclassic-X.Y.Z-windows-x64-setup.exe` 與 `msclassic-X.Y.Z-macos-universal.dmg`
+（Apple Silicon 與 Intel 通用），並附到同一個 Release。也可以在 Actions 頁面
+手動執行，只保留 artifact 不發佈。
+
+安裝檔沒有程式碼簽章：Windows 首次執行會出現 SmartScreen 提示，macOS 首次
+開啟需右鍵「打開」，或先移除隔離屬性（`xattr -cr`）。
 
 ## 網頁版
 

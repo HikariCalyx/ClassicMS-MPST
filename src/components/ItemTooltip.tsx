@@ -1,19 +1,12 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { ItemTooltip as ItemTooltipData } from "../api";
+import { useI18n } from "../i18n";
 import { exportDropItemTooltipPng, exportTooltipPng } from "./tooltipExport";
+import { tooltipText, tooltipTitle } from "./tooltipText";
 
 /** 呈現方式對齊 Harepacker-MPST 的 ItemTooltipCard（gear 版本）。 */
 
-export const ALL_JOB_LABELS = ["初心者", "劍士", "法師", "弓箭手", "盜賊", "海盜"];
-/** 需求屬性標籤（畫面與 PNG 匯出共用）。 */
-export const REQ_LABELS = {
-  level: "等級限制",
-  str: "力量限制",
-  dex: "敏捷限制",
-  int: "智力限制",
-  luk: "幸運限制",
-} as const;
 const ICON_SCALE = 2;
 const ICON_MIN_SIZE = 34;
 const ICON_MAX_SIZE = 68;
@@ -47,6 +40,7 @@ export const formatItemDescription = (title: string, desc: string): string => {
 /** 右鍵「儲存成 PNG」選單（裝備與非裝備 tooltip 共用）：
  *  選單開著時，點外面、Esc、視窗失焦或縮放就關掉。 */
 function useSavePngMenu(saveAsPng: () => void) {
+  const { t } = useI18n();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +93,7 @@ function useSavePngMenu(saveAsPng: () => void) {
               saveAsPng();
             }}
           >
-            儲存成 PNG
+            {t("common.saveAsPng")}
           </button>
         </div>,
         document.body,
@@ -112,10 +106,11 @@ function useSavePngMenu(saveAsPng: () => void) {
 /** 非裝備戰利品 tooltip（消耗/其他）：左圖示、右側上名稱下描述，
  *  外觀與分隔線對齊裝備版；右鍵可儲存成圖片。 */
 export function DropItemTooltip({ details }: { details: ItemTooltipData }) {
+  const { t } = useI18n();
   const [iconSize, setIconSize] = useState<{ width: number; height: number } | null>(null);
   const { openMenu, menuElement } = useSavePngMenu(() => {
     exportDropItemTooltipPng(details).catch((err: unknown) => {
-      window.alert(`儲存失敗：${String(err)}`);
+      window.alert(t("common.saveFailed", { error: String(err) }));
     });
   });
 
@@ -140,8 +135,8 @@ export function DropItemTooltip({ details }: { details: ItemTooltipData }) {
     <>
       <article
         className="item-tooltip drop-item-tooltip"
-        aria-label="道具 tooltip"
-        title="右鍵可儲存成圖片"
+        aria-label={t("tooltip.itemAria")}
+        title={t("tooltip.rightClickHint")}
         onContextMenu={openMenu}
       >
         <div className="item-tooltip-icon-frame">
@@ -163,7 +158,7 @@ export function DropItemTooltip({ details }: { details: ItemTooltipData }) {
           )}
         </div>
         <div className="drop-item-tooltip-text">
-          <h3 className="drop-item-tooltip-name">{details.title}</h3>
+          <h3 className="drop-item-tooltip-name">{tooltipTitle(details, t)}</h3>
           {description ? (
             <>
               <div className="item-tooltip-divider" aria-hidden="true" />
@@ -178,10 +173,12 @@ export function DropItemTooltip({ details }: { details: ItemTooltipData }) {
 }
 
 export function ItemTooltip({ details }: { details: ItemTooltipData }) {
+  const { t } = useI18n();
+  const text = useMemo(() => tooltipText(details, t), [details, t]);
   const [iconSize, setIconSize] = useState<{ width: number; height: number } | null>(null);
   const { openMenu, menuElement } = useSavePngMenu(() => {
     exportTooltipPng(details).catch((err: unknown) => {
-      window.alert(`儲存失敗：${String(err)}`);
+      window.alert(t("common.saveFailed", { error: String(err) }));
     });
   });
 
@@ -206,16 +203,14 @@ export function ItemTooltip({ details }: { details: ItemTooltipData }) {
     <>
       <article
         className="item-tooltip"
-        aria-label="裝備 tooltip"
-        title="右鍵可儲存成圖片"
+        aria-label={t("tooltip.gearAria")}
+        title={t("tooltip.rightClickHint")}
         onContextMenu={openMenu}
       >
       <header className="item-tooltip-header">
         <span className="item-tooltip-id">{details.itemId}</span>
-        <h3>{details.title}</h3>
-        {details.attributeLines.length > 0 ? (
-          <p className="item-tooltip-attributes">{details.attributeLines.join(", ")}</p>
-        ) : null}
+        <h3>{text.title}</h3>
+        {text.attributes ? <p className="item-tooltip-attributes">{text.attributes}</p> : null}
       </header>
 
       <section className="item-tooltip-summary">
@@ -240,27 +235,27 @@ export function ItemTooltip({ details }: { details: ItemTooltipData }) {
         <dl className="item-tooltip-reqs">
           <div className="item-tooltip-req-row">
             <div className={`item-tooltip-req is-wide ${reqTone(details.requiredLevel, true)}`}>
-              <dt>{REQ_LABELS.level}</dt>
+              <dt>{text.req.level}</dt>
               <dd>{formatReq(details.requiredLevel)}</dd>
             </div>
           </div>
           <div className="item-tooltip-req-row">
             <div className={`item-tooltip-req ${reqTone(details.requiredStr)}`}>
-              <dt>{REQ_LABELS.str}</dt>
+              <dt>{text.req.str}</dt>
               <dd>{formatReq(details.requiredStr)}</dd>
             </div>
             <div className={`item-tooltip-req ${reqTone(details.requiredLuk)}`}>
-              <dt>{REQ_LABELS.luk}</dt>
+              <dt>{text.req.luk}</dt>
               <dd>{formatReq(details.requiredLuk)}</dd>
             </div>
           </div>
           <div className="item-tooltip-req-row">
             <div className={`item-tooltip-req ${reqTone(details.requiredDex)}`}>
-              <dt>{REQ_LABELS.dex}</dt>
+              <dt>{text.req.dex}</dt>
               <dd>{formatReq(details.requiredDex)}</dd>
             </div>
             <div className={`item-tooltip-req ${reqTone(details.requiredInt)}`}>
-              <dt>{REQ_LABELS.int}</dt>
+              <dt>{text.req.int}</dt>
               <dd>{formatReq(details.requiredInt)}</dd>
             </div>
           </div>
@@ -268,12 +263,9 @@ export function ItemTooltip({ details }: { details: ItemTooltipData }) {
       </section>
 
       <div className="item-tooltip-jobs">
-        {ALL_JOB_LABELS.map((job) => (
-          <span
-            key={job}
-            className={details.requiredJobs.includes(job) ? "is-enabled" : "is-disabled"}
-          >
-            {job}
+        {text.jobs.map((job) => (
+          <span key={job.code} className={job.enabled ? "is-enabled" : "is-disabled"}>
+            {job.label}
           </span>
         ))}
       </div>
@@ -281,23 +273,23 @@ export function ItemTooltip({ details }: { details: ItemTooltipData }) {
       <div className="item-tooltip-divider" aria-hidden="true" />
 
       <section className="item-tooltip-details">
-        <p className="item-tooltip-line is-full">{details.categoryLine}</p>
-        {details.attackSpeedLabel ? (
+        <p className="item-tooltip-line is-full">{text.categoryLine}</p>
+        {text.attackSpeed ? (
           <p className="item-tooltip-line">
-            <span className="item-tooltip-label">{"攻擊速度 : "}</span>
-            <span className="item-tooltip-value">{details.attackSpeedLabel}</span>
+            <span className="item-tooltip-label">{`${text.attackSpeed.label} : `}</span>
+            <span className="item-tooltip-value">{text.attackSpeed.value}</span>
           </p>
         ) : null}
-        {details.statLines.map((line) => (
+        {text.stats.map((line) => (
           <p className="item-tooltip-line" key={`${line.label}:${line.value}`}>
             <span className="item-tooltip-label">{`${line.label} : `}</span>
             <span className="item-tooltip-value">{line.value}</span>
           </p>
         ))}
-        {details.scrollCount !== null ? (
+        {text.scrollCount ? (
           <p className="item-tooltip-line is-accent">
-            <span className="item-tooltip-label">{"可使用卷軸次數 : "}</span>
-            <span className="item-tooltip-value">{details.scrollCount}</span>
+            <span className="item-tooltip-label">{`${text.scrollCount.label} : `}</span>
+            <span className="item-tooltip-value">{text.scrollCount.value}</span>
           </p>
         ) : null}
       </section>

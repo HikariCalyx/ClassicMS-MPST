@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import type { PetEquipInfo } from "../api";
+import { useI18n } from "../i18n";
 import { loadPetIcon } from "./PetShop";
 
 // 已穿寵裝列：icon + 名稱 + × 脫下鈕（比照 AvatarEquipPanel 的 AvatarEquipRow；
 // 寵裝只有一件，不需要點列切換顯示的功能）。
 function PetEquipRow({ item, onRemove }: { item: PetEquipInfo; onRemove: () => void }) {
+  const { t } = useI18n();
   const [icon, setIcon] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,8 +26,8 @@ function PetEquipRow({ item, onRemove }: { item: PetEquipInfo; onRemove: () => v
       <button
         type="button"
         className="avatar-equipped-remove"
-        title="脫下"
-        aria-label={`脫下 ${item.name}`}
+        title={t("pet.equip.remove")}
+        aria-label={t("pet.equip.removeItem", { name: item.name })}
         onClick={onRemove}
       >
         ×
@@ -63,10 +65,11 @@ export function PetControlPanel({
   equip,
   onRemoveEquip,
 }: PetControlPanelProps) {
+  const { t } = useI18n();
   return (
     <div className="avatar-controls">
       <div className="avatar-control-row">
-        <label htmlFor="pet-action-select">動作</label>
+        <label htmlFor="pet-action-select">{t("pet.controls.action")}</label>
         <div className="avatar-action-row">
           <select
             id="pet-action-select"
@@ -88,8 +91,8 @@ export function PetControlPanel({
           <button
             type="button"
             className="avatar-play-button"
-            title={playing ? "暫停" : "播放"}
-            aria-label={playing ? "暫停" : "播放"}
+            title={playing ? t("common.pause") : t("common.play")}
+            aria-label={playing ? t("common.pause") : t("common.play")}
             onClick={onTogglePlaying}
           >
             {playing ? "⏸" : "▶"}
@@ -98,7 +101,7 @@ export function PetControlPanel({
       </div>
 
       <div className="avatar-control-row">
-        <label htmlFor="pet-emotion-select">表情</label>
+        <label htmlFor="pet-emotion-select">{t("pet.controls.emotion")}</label>
         <select
           id="pet-emotion-select"
           value={isEmotion ? action : ""}
@@ -121,7 +124,7 @@ export function PetControlPanel({
       {equip ? (
         <>
           <hr className="avatar-divider" />
-          <p className="avatar-equipped-title">目前裝備</p>
+          <p className="avatar-equipped-title">{t("pet.equip.title")}</p>
           <PetEquipRow item={equip} onRemove={onRemoveEquip} />
         </>
       ) : null}

@@ -12,6 +12,7 @@
 
 import { DATA_ROOT, fetchChecked, findNode, loadTree, resolveUolTarget } from "./core";
 import type { TreeNode } from "./core";
+import { t } from "../i18n";
 import type {
   AvatarFrame,
   AvatarFrames,
@@ -234,13 +235,13 @@ export async function getPetFrames(
   const tree = await loadTree(imgKey);
   const actionRel = findActionAt(tree, "", [action, "stand0"].filter((s) => s !== ""));
   if (actionRel == null) {
-    throw new Error(`寵物 ${petId} 無可用動作 ${action}`);
+    throw new Error(t("data.error.petNoAction", { id: petId, action }));
   }
   const bodyFrames = frameList(tree, actionRel)
     .map((rel) => resolveFrame(tree, rel))
     .filter((rel): rel is string => rel != null);
   if (bodyFrames.length === 0) {
-    throw new Error(`寵物 ${petId} 動作 ${action} 無幀`);
+    throw new Error(t("data.error.petNoFrames", { id: petId, action }));
   }
 
   // 每幀的（delay, origin）；寵物幀節點本身就是 canvas

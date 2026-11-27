@@ -1,9 +1,73 @@
-// 技能瀏覽器的中繼資料：職業對照表、職業群分組、每級數值 prop 的中文標籤、
+// 技能瀏覽器的中繼資料：職業對照表、職業群分組、每級數值 prop 的標籤與單位、
 // 以及楓之谷字串（\n 換行、#c…# 強調、#prop 佔位符）的解析工具。
-// 遊戲字串表（String/TW/Skill）不含職業名稱，職業顯示名由此表提供。
+// 遊戲字串表（String/TW/Skill）不含職業名稱，職業顯示名由此表提供；
+// 表內只存代碼，顯示文字在 i18n/messages/skill.ts 依介面語言決定。
 
-export type JobGroup = "冒險家" | "皇家騎士團" | "英雄" | "其他";
+import type { MessageKey, TFunction } from "../i18n";
 
+/** 職業群代碼：冒險家 / 皇家騎士團 / 英雄 / 其他。 */
+export type JobGroup = "explorer" | "cygnus" | "hero" | "other";
+
+/** 職業名稱代碼（顯示名為 skill.job.<代碼>）；同系列各轉同名時共用一個代碼。 */
+type JobName =
+  | "beginner"
+  | "warrior"
+  | "fighter"
+  | "crusader"
+  | "hero"
+  | "page"
+  | "whiteKnight"
+  | "paladin"
+  | "spearman"
+  | "dragonKnight"
+  | "darkKnight"
+  | "magician"
+  | "wizardFirePoison"
+  | "mageFirePoison"
+  | "archMageFirePoison"
+  | "wizardIceLightning"
+  | "mageIceLightning"
+  | "archMageIceLightning"
+  | "cleric"
+  | "priest"
+  | "bishop"
+  | "bowman"
+  | "hunter"
+  | "ranger"
+  | "bowmaster"
+  | "crossbowman"
+  | "sniper"
+  | "marksman"
+  | "thief"
+  | "assassin"
+  | "hermit"
+  | "nightLord"
+  | "bandit"
+  | "chiefBandit"
+  | "shadower"
+  | "pirate"
+  | "brawler"
+  | "marauder"
+  | "buccaneer"
+  | "gunslinger"
+  | "outlaw"
+  | "corsair"
+  | "noblesse"
+  | "dawnWarrior"
+  | "blazeWizard"
+  | "windArcher"
+  | "nightWalker"
+  | "thunderBreaker"
+  | "legend"
+  | "aran"
+  | "evan"
+  | "mounts"
+  | "gm";
+
+/** 轉職階段：1 = 一轉 … 9 = 九轉（顯示名為 skill.tier.<階段>）。 */
+type JobTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/** 職業顯示資訊（依介面語言組好的文字）。 */
 export interface JobMeta {
   name: string;
   /** 轉職階段（一轉/二轉…）；新手等不分階段的為 null。 */
@@ -11,198 +75,233 @@ export interface JobMeta {
   group: JobGroup;
 }
 
-/** (id, 名稱, 轉職階段) 批次登記用。 */
-type JobEntry = [id: string, name: string, tier?: string];
+/** 對照表的一筆：只存代碼，顯示時才翻譯。 */
+interface JobInfo {
+  name: JobName;
+  tier: JobTier | null;
+  group: JobGroup;
+}
 
-function buildJobMeta(): Record<string, JobMeta> {
-  const table: Record<string, JobMeta> = {};
+/** (id, 名稱代碼, 轉職階段) 批次登記用。 */
+type JobEntry = [id: string, name: JobName, tier?: JobTier];
+
+function buildJobTable(): Record<string, JobInfo> {
+  const table: Record<string, JobInfo> = {};
   const register = (group: JobGroup, entries: JobEntry[]) => {
     for (const [id, name, tier] of entries) {
       table[id] = { name, tier: tier ?? null, group };
     }
   };
-  register("冒險家", [
-    ["000", "新手"],
-    ["100", "劍士", "一轉"],
-    ["110", "狂戰士", "二轉"],
-    ["111", "十字軍", "三轉"],
-    ["112", "英雄", "四轉"],
-    ["120", "準騎士", "二轉"],
-    ["121", "騎士", "三轉"],
-    ["122", "聖騎士", "四轉"],
-    ["130", "槍戰士", "二轉"],
-    ["131", "龍騎士", "三轉"],
-    ["132", "黑騎士", "四轉"],
-    ["200", "魔法師", "一轉"],
-    ["210", "巫師（火、毒）", "二轉"],
-    ["211", "魔導士（火、毒）", "三轉"],
-    ["212", "大魔導士（火、毒）", "四轉"],
-    ["220", "巫師（冰、雷）", "二轉"],
-    ["221", "魔導士（冰、雷）", "三轉"],
-    ["222", "大魔導士（冰、雷）", "四轉"],
-    ["230", "僧侶", "二轉"],
-    ["231", "祭司", "三轉"],
-    ["232", "主教", "四轉"],
-    ["300", "弓箭手", "一轉"],
-    ["310", "獵人", "二轉"],
-    ["311", "遊俠", "三轉"],
-    ["312", "箭神", "四轉"],
-    ["320", "弩弓手", "二轉"],
-    ["321", "狙擊手", "三轉"],
-    ["322", "神射手", "四轉"],
-    ["400", "盜賊", "一轉"],
-    ["410", "刺客", "二轉"],
-    ["411", "暗殺者", "三轉"],
-    ["412", "夜使者", "四轉"],
-    ["420", "俠盜", "二轉"],
-    ["421", "神偷", "三轉"],
-    ["422", "暗影神偷", "四轉"],
-    ["500", "海盜", "一轉"],
-    ["510", "拳手", "二轉"],
-    ["511", "格鬥家", "三轉"],
-    ["512", "拳霸", "四轉"],
-    ["520", "槍手", "二轉"],
-    ["521", "神槍手", "三轉"],
-    ["522", "槍神", "四轉"],
+  register("explorer", [
+    ["000", "beginner"],
+    ["100", "warrior", 1],
+    ["110", "fighter", 2],
+    ["111", "crusader", 3],
+    ["112", "hero", 4],
+    ["120", "page", 2],
+    ["121", "whiteKnight", 3],
+    ["122", "paladin", 4],
+    ["130", "spearman", 2],
+    ["131", "dragonKnight", 3],
+    ["132", "darkKnight", 4],
+    ["200", "magician", 1],
+    ["210", "wizardFirePoison", 2],
+    ["211", "mageFirePoison", 3],
+    ["212", "archMageFirePoison", 4],
+    ["220", "wizardIceLightning", 2],
+    ["221", "mageIceLightning", 3],
+    ["222", "archMageIceLightning", 4],
+    ["230", "cleric", 2],
+    ["231", "priest", 3],
+    ["232", "bishop", 4],
+    ["300", "bowman", 1],
+    ["310", "hunter", 2],
+    ["311", "ranger", 3],
+    ["312", "bowmaster", 4],
+    ["320", "crossbowman", 2],
+    ["321", "sniper", 3],
+    ["322", "marksman", 4],
+    ["400", "thief", 1],
+    ["410", "assassin", 2],
+    ["411", "hermit", 3],
+    ["412", "nightLord", 4],
+    ["420", "bandit", 2],
+    ["421", "chiefBandit", 3],
+    ["422", "shadower", 4],
+    ["500", "pirate", 1],
+    ["510", "brawler", 2],
+    ["511", "marauder", 3],
+    ["512", "buccaneer", 4],
+    ["520", "gunslinger", 2],
+    ["521", "outlaw", 3],
+    ["522", "corsair", 4],
   ]);
-  register("皇家騎士團", [
-    ["1000", "貴族"],
-    ["1100", "聖魂劍士", "一轉"],
-    ["1110", "聖魂劍士", "二轉"],
-    ["1111", "聖魂劍士", "三轉"],
-    ["1112", "聖魂劍士", "四轉"],
-    ["1200", "烈焰巫師", "一轉"],
-    ["1210", "烈焰巫師", "二轉"],
-    ["1211", "烈焰巫師", "三轉"],
-    ["1212", "烈焰巫師", "四轉"],
-    ["1300", "破風使者", "一轉"],
-    ["1310", "破風使者", "二轉"],
-    ["1311", "破風使者", "三轉"],
-    ["1312", "破風使者", "四轉"],
-    ["1400", "暗夜行者", "一轉"],
-    ["1410", "暗夜行者", "二轉"],
-    ["1411", "暗夜行者", "三轉"],
-    ["1412", "暗夜行者", "四轉"],
-    ["1500", "閃雷悍將", "一轉"],
-    ["1510", "閃雷悍將", "二轉"],
-    ["1511", "閃雷悍將", "三轉"],
-    ["1512", "閃雷悍將", "四轉"],
+  register("cygnus", [
+    ["1000", "noblesse"],
+    ["1100", "dawnWarrior", 1],
+    ["1110", "dawnWarrior", 2],
+    ["1111", "dawnWarrior", 3],
+    ["1112", "dawnWarrior", 4],
+    ["1200", "blazeWizard", 1],
+    ["1210", "blazeWizard", 2],
+    ["1211", "blazeWizard", 3],
+    ["1212", "blazeWizard", 4],
+    ["1300", "windArcher", 1],
+    ["1310", "windArcher", 2],
+    ["1311", "windArcher", 3],
+    ["1312", "windArcher", 4],
+    ["1400", "nightWalker", 1],
+    ["1410", "nightWalker", 2],
+    ["1411", "nightWalker", 3],
+    ["1412", "nightWalker", 4],
+    ["1500", "thunderBreaker", 1],
+    ["1510", "thunderBreaker", 2],
+    ["1511", "thunderBreaker", 3],
+    ["1512", "thunderBreaker", 4],
   ]);
-  register("英雄", [
-    ["2000", "戰童"],
-    ["2100", "狂狼勇士", "一轉"],
-    ["2110", "狂狼勇士", "二轉"],
-    ["2111", "狂狼勇士", "三轉"],
-    ["2112", "狂狼勇士", "四轉"],
-    ["2200", "龍魔導士"],
-    ["2210", "龍魔導士", "一轉"],
-    ["2211", "龍魔導士", "二轉"],
-    ["2212", "龍魔導士", "三轉"],
-    ["2213", "龍魔導士", "四轉"],
-    ["2214", "龍魔導士", "五轉"],
-    ["2215", "龍魔導士", "六轉"],
-    ["2216", "龍魔導士", "七轉"],
-    ["2217", "龍魔導士", "八轉"],
-    ["2218", "龍魔導士", "九轉"],
+  register("hero", [
+    ["2000", "legend"],
+    ["2100", "aran", 1],
+    ["2110", "aran", 2],
+    ["2111", "aran", 3],
+    ["2112", "aran", 4],
+    ["2200", "evan"],
+    ["2210", "evan", 1],
+    ["2211", "evan", 2],
+    ["2212", "evan", 3],
+    ["2213", "evan", 4],
+    ["2214", "evan", 5],
+    ["2215", "evan", 6],
+    ["2216", "evan", 7],
+    ["2217", "evan", 8],
+    ["2218", "evan", 9],
   ]);
-  register("其他", [
-    ["800", "騎寵"],
-    ["900", "管理員"],
+  register("other", [
+    ["800", "mounts"],
+    ["900", "gm"],
   ]);
   return table;
 }
 
-const JOB_META = buildJobMeta();
+const JOB_TABLE = buildJobTable();
 
-/** 查職業顯示資訊；對照表沒有的 id 歸到「其他」。 */
-export function jobMeta(job: string): JobMeta {
-  return JOB_META[job] ?? { name: `職業 ${job}`, tier: null, group: "其他" };
+/** 查職業顯示資訊（依介面語言）；對照表沒有的 id 歸到「其他」。 */
+export function jobMeta(job: string, t: TFunction): JobMeta {
+  const info: JobInfo | undefined = JOB_TABLE[job];
+  if (!info) return { name: t("skill.job.unknown", { job }), tier: null, group: "other" };
+  return {
+    name: t(`skill.job.${info.name}`),
+    tier: info.tier ? t(`skill.tier.${info.tier}`) : null,
+    group: info.group,
+  };
 }
+
+/** 職業名加轉職階段（如「狂戰士・二轉」）；不分階段的只有職業名。 */
+export function jobLabel(job: string, t: TFunction): string {
+  const { name, tier } = jobMeta(job, t);
+  return tier ? t("skill.job.withTier", { name, tier }) : name;
+}
+
+/** 左欄分區代碼（標題為 skill.section.<代碼>）。 */
+export type JobSection =
+  | "beginner"
+  | "warrior"
+  | "magician"
+  | "bowman"
+  | "thief"
+  | "pirate"
+  | "cygnus"
+  | "hero"
+  | "other";
 
 /**
- * 左欄的分區標題：冒險家細分成 新手/劍士/法師/弓箭手/盜賊/海盜（依職業 id 首位），
+ * 左欄的分區：冒險家細分成 新手/劍士/法師/弓箭手/盜賊/海盜（依職業 id 首位），
  * 皇家騎士團與英雄維持單一區塊；對照表沒有的 id 歸「其他」。
  */
-export function jobSection(job: string): string {
-  const meta = jobMeta(job);
-  if (meta.group !== "冒險家") return meta.group;
-  if (job === "000") return "新手・冒險家";
-  const family = JOB_FAMILY[job.charAt(0)];
-  return family ? `${family}・冒險家` : "其他";
+export function jobSection(job: string): JobSection {
+  const group = JOB_TABLE[job]?.group ?? "other";
+  if (group !== "explorer") return group;
+  if (job === "000") return "beginner";
+  return JOB_FAMILY[job.charAt(0)] ?? "other";
 }
 
-/** 冒險家職業 id 首位 → 系譜名（一轉職業名）。 */
-const JOB_FAMILY: Record<string, string> = {
-  "1": "劍士",
-  "2": "法師",
-  "3": "弓箭手",
-  "4": "盜賊",
-  "5": "海盜",
+/** 冒險家職業 id 首位 → 系譜（一轉職業）的分區代碼。 */
+const JOB_FAMILY: Record<string, JobSection> = {
+  "1": "warrior",
+  "2": "magician",
+  "3": "bowman",
+  "4": "thief",
+  "5": "pirate",
 };
 
 /** 左欄分區的顯示順序。 */
-export const SECTION_ORDER: string[] = [
-  "新手・冒險家",
-  "劍士・冒險家",
-  "法師・冒險家",
-  "弓箭手・冒險家",
-  "盜賊・冒險家",
-  "海盜・冒險家",
-  "皇家騎士團",
-  "英雄",
-  "其他",
+export const SECTION_ORDER: JobSection[] = [
+  "beginner",
+  "warrior",
+  "magician",
+  "bowman",
+  "thief",
+  "pirate",
+  "cygnus",
+  "hero",
+  "other",
 ];
 
-/** 每級數值 prop 的中文標籤與單位；查不到的 key 原樣顯示。 */
-const PROP_META: Record<string, { label: string; unit?: "%" | "秒" }> = {
-  mpCon: { label: "MP 消耗" },
-  hpCon: { label: "HP 消耗" },
-  damage: { label: "傷害", unit: "%" },
-  prop: { label: "機率", unit: "%" },
-  attackCount: { label: "攻擊次數" },
-  mobCount: { label: "攻擊怪物數" },
-  targetPlus: { label: "額外攻擊目標" },
-  time: { label: "持續時間", unit: "秒" },
-  cooldown: { label: "冷卻時間", unit: "秒" },
-  interval: { label: "觸發間隔", unit: "秒" },
-  range: { label: "射程範圍" },
-  pad: { label: "物理攻擊力" },
-  pdd: { label: "物理防禦力" },
-  mad: { label: "魔法攻擊力" },
-  mdd: { label: "魔法防禦力" },
-  acc: { label: "命中值" },
-  eva: { label: "迴避值" },
-  speed: { label: "移動速度" },
-  jump: { label: "跳躍力" },
-  mastery: { label: "熟練度", unit: "%" },
-  ter: { label: "屬性抗性", unit: "%" },
-  asr: { label: "狀態異常抗性", unit: "%" },
-  cr: { label: "爆擊機率", unit: "%" },
-  bulletCount: { label: "子彈數量" },
-  bulletCon: { label: "子彈消耗" },
-  moneyCon: { label: "楓幣消耗" },
-  itemCon: { label: "道具消耗" },
-  morph: { label: "變身" },
-  hp: { label: "HP" },
-  mp: { label: "MP" },
-  x: { label: "數值 X" },
-  y: { label: "數值 Y" },
-  z: { label: "數值 Z" },
-  expPerReduce: { label: "死亡時經驗值減少", unit: "%" },
-  lt: { label: "範圍左上" },
-  rb: { label: "範圍右下" },
+/** prop 標籤的訊息 key（skill.prop.*）。 */
+type PropLabelKey = Extract<MessageKey, `skill.prop.${string}`>;
+
+/** 每級數值 prop 的標籤（訊息 key）與單位；查不到的 key 原樣顯示。 */
+const PROP_META: Record<string, { label: PropLabelKey; unit?: "%" | "seconds" }> = {
+  mpCon: { label: "skill.prop.mpCon" },
+  hpCon: { label: "skill.prop.hpCon" },
+  damage: { label: "skill.prop.damage", unit: "%" },
+  prop: { label: "skill.prop.prop", unit: "%" },
+  attackCount: { label: "skill.prop.attackCount" },
+  mobCount: { label: "skill.prop.mobCount" },
+  targetPlus: { label: "skill.prop.targetPlus" },
+  time: { label: "skill.prop.time", unit: "seconds" },
+  cooldown: { label: "skill.prop.cooldown", unit: "seconds" },
+  interval: { label: "skill.prop.interval", unit: "seconds" },
+  range: { label: "skill.prop.range" },
+  pad: { label: "skill.prop.pad" },
+  pdd: { label: "skill.prop.pdd" },
+  mad: { label: "skill.prop.mad" },
+  mdd: { label: "skill.prop.mdd" },
+  acc: { label: "skill.prop.acc" },
+  eva: { label: "skill.prop.eva" },
+  speed: { label: "skill.prop.speed" },
+  jump: { label: "skill.prop.jump" },
+  mastery: { label: "skill.prop.mastery", unit: "%" },
+  ter: { label: "skill.prop.ter", unit: "%" },
+  asr: { label: "skill.prop.asr", unit: "%" },
+  cr: { label: "skill.prop.cr", unit: "%" },
+  bulletCount: { label: "skill.prop.bulletCount" },
+  bulletCon: { label: "skill.prop.bulletCon" },
+  moneyCon: { label: "skill.prop.moneyCon" },
+  itemCon: { label: "skill.prop.itemCon" },
+  morph: { label: "skill.prop.morph" },
+  hp: { label: "skill.prop.hp" },
+  mp: { label: "skill.prop.mp" },
+  x: { label: "skill.prop.x" },
+  y: { label: "skill.prop.y" },
+  z: { label: "skill.prop.z" },
+  expPerReduce: { label: "skill.prop.expPerReduce", unit: "%" },
+  lt: { label: "skill.prop.lt" },
+  rb: { label: "skill.prop.rb" },
 };
 
 export type PropValue = number | string | [number, number];
 
-export function propLabel(key: string): string {
-  return PROP_META[key]?.label ?? key;
+export function propLabel(key: string, t: TFunction): string {
+  const label = PROP_META[key]?.label;
+  return label ? t(label) : key;
 }
 
-export function formatPropValue(key: string, value: PropValue): string {
+export function formatPropValue(key: string, value: PropValue, t: TFunction): string {
   if (Array.isArray(value)) return `(${value[0]}, ${value[1]})`;
   if (typeof value === "number") {
     const unit = PROP_META[key]?.unit;
+    if (unit === "seconds") return t("skill.unit.seconds", { value });
     return unit ? `${value}${unit}` : value.toLocaleString();
   }
   return value;

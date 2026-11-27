@@ -39,6 +39,20 @@ function enqueueOpen<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** 需要給使用者看的錯誤代碼;訊息由主執行緒依介面語言組字(見 client.ts)。 */
+export type WorkerErrorCode = "storageBusy" | "storageFull";
+
+class WorkerError extends Error {
+  readonly code: WorkerErrorCode;
+  readonly params: Record<string, string>;
+
+  constructor(code: WorkerErrorCode, params: Record<string, string> = {}) {
+    super(code);
+    this.code = code;
+    this.params = params;
+  }
+}
+
 /** createSyncAccessHandle 的互斥錯誤換成可操作的提示(最常見:另一個分頁也開著本機資料)。 */
 async function createSyncHandle(
   fileHandle: FileSystemFileHandle,
@@ -49,10 +63,7 @@ async function createSyncHandle(
     const name = error instanceof DOMException ? error.name : "";
     const message = error instanceof Error ? error.message : String(error);
     if (name === "NoModificationAllowedError" || /Access Handles? cannot be created/i.test(message)) {
-      throw new Error(
-        "無法開啟本機資料:瀏覽器儲存空間正被占用。" +
-          "請確認沒有其他分頁同時開啟本工具的本機資料模式,關閉那些分頁後再試一次。",
-      );
+      throw new WorkerError("storageBusy");
     }
     throw error;
   }
@@ -123,7 +134,7 @@ async function openCached(): Promise<unknown | null> {
   const manifest = await cachedManifest();
   if (!manifest) return null;
   await openSyncHandles(manifest);
-  report({ phase: "catalog", percent: 100, message: "正在載入資產索引…" });
+  report({ phase: "catalog", percent: 100, stage: "loadingIndex" });
   return wasm.open(manifest);
 }
 
@@ -162,7 +173,7 @@ async function syncBundlesToOpfs(files: File[]): Promise<BundleMeta[]> {
   }
 
   if (changed.length === 0) {
-    report({ phase: "copy", percent: 100, message: "遊戲資料未變動,沿用本機快取" });
+    report({ phase: "copy", percent: 100, stage: "unchanged" });
     return manifest;
   }
 
@@ -172,10 +183,10 @@ async function syncBundlesToOpfs(files: File[]): Promise<BundleMeta[]> {
   if (estimate.quota != null && estimate.usage != null) {
     const available = estimate.quota - estimate.usage;
     if (needed > available) {
-      throw new Error(
-        `瀏覽器儲存空間不足:需要約 ${formatMiB(needed)},可用約 ${formatMiB(available)}。` +
-          "請清出磁碟空間或使用桌面版。",
-      );
+      throw new WorkerError("storageFull", {
+        needed: formatMiB(needed),
+        available: formatMiB(available),
+      });
     }
   }
 
@@ -197,8 +208,10 @@ async function syncBundlesToOpfs(files: File[]): Promise<BundleMeta[]> {
         report({
           phase: "copy",
           percent,
+          stage: "copying",
           file: file.name,
-          message: `複製資料到瀏覽器儲存空間(${fileIndex}/${changed.length}): ${file.name}`,
+          fileIndex,
+          fileCount: changed.length,
         });
       }
       sync.flush();
@@ -265,7 +278,7 @@ async function openSyncHandles(manifest: BundleMeta[]): Promise<void> {
 async function importBundles(files: File[]): Promise<unknown> {
   const manifest = await syncBundlesToOpfs(files);
   await openSyncHandles(manifest);
-  report({ phase: "catalog", percent: 100, message: "正在建立資產索引…" });
+  report({ phase: "catalog", percent: 100, stage: "buildingIndex" });
   // wasm open 是同步的(catalog build 可能數十秒),在 Worker 跑不會凍結 UI。
   return wasm.open(manifest);
 }
@@ -368,6 +381,7 @@ ctx.onmessage = (event: MessageEvent<RpcRequest>) => {
         id,
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+        ...(error instanceof WorkerError ? { code: error.code, params: error.params } : {}),
       }),
   );
 };

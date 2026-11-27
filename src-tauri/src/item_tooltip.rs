@@ -1,6 +1,8 @@
 //! 裝備 tooltip 聚合：給定節點路徑，彙整 info 屬性、icon 圖與
 //! `String/TW/Item` 的名稱/說明，回傳前端 tooltip 卡片所需的一切。
 //! 欄位解碼邏輯對齊 Harepacker-MPST 的 `wz/item_tooltip.rs`（gear 部分）。
+//! 分類、職業、屬性與能力值只回代碼與原始數值，顯示文字由前端依介面語言決定
+//! （src/i18n/messages/tooltip.ts）。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -13,31 +15,20 @@ use crate::commodity::item_path_candidates;
 use crate::wzjs::{Value, WzNode};
 
 /// 對齊 MPST 的 GEAR_STAT_LABELS（順序即顯示順序）。
-const GEAR_STAT_LABELS: &[(&str, &str)] = &[
-    ("incSTR", "STR"),
-    ("incDEX", "DEX"),
-    ("incINT", "INT"),
-    ("incLUK", "LUK"),
-    ("incMHP", "MaxHP"),
-    ("incMMP", "MaxMP"),
-    ("incPAD", "攻擊力"),
-    ("incMAD", "魔法攻擊力"),
-    ("incPDD", "物理防禦力"),
-    ("incMDD", "魔法防禦力"),
-    ("incACC", "命中值"),
-    ("incEVA", "迴避值"),
-    ("incSpeed", "移動速度"),
-    ("incJump", "跳躍力"),
-    ("tuc", "可升級次數"),
+const GEAR_STAT_KEYS: &[&str] = &[
+    "incSTR", "incDEX", "incINT", "incLUK", "incMHP", "incMMP", "incPAD", "incMAD", "incPDD",
+    "incMDD", "incACC", "incEVA", "incSpeed", "incJump", "tuc",
 ];
 
-const ALL_JOB_LABELS: &[&str] = &["初心者", "劍士", "法師", "弓箭手", "盜賊", "海盜"];
-const JOB_MASK_LABELS: &[(i64, &str)] = &[
-    (1, "劍士"),
-    (2, "法師"),
-    (4, "弓箭手"),
-    (8, "盜賊"),
-    (16, "海盜"),
+const ALL_JOBS: &[&str] = &[
+    "beginner", "warrior", "magician", "bowman", "thief", "pirate",
+];
+const JOB_MASKS: &[(i64, &str)] = &[
+    (1, "warrior"),
+    (2, "magician"),
+    (4, "bowman"),
+    (8, "thief"),
+    (16, "pirate"),
 ];
 
 /// `String/TW/Item` text_asset 解析後的名稱表：道具 id →（名稱, 說明）。
@@ -48,11 +39,12 @@ pub(crate) type ItemNameTable = HashMap<u32, (String, Option<String>)>;
 #[derive(Default)]
 pub(crate) struct TooltipNameCache(Mutex<Option<Arc<ItemNameTable>>>);
 
+/// 裝備能力值：`info` 的屬性名與原始數值（0 不列）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TooltipStatLine {
-    pub label: String,
-    pub value: String,
+pub struct TooltipStat {
+    pub key: &'static str,
+    pub value: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,9 +53,15 @@ pub struct ItemTooltip {
     pub item_id: String,
     /// 裝備 img 根路徑（例如 `Character/Weapon/01302000`）。
     pub img_path: String,
+    /// 道具名稱；字串表沒有這個道具時為 item_id。
     pub title: String,
     pub description: Option<String>,
-    pub category_line: String,
+    /// `info/reqGender`：0 = 男、1 = 女；沒有限制時為 None。
+    pub req_gender: Option<i64>,
+    /// 裝備分類代碼（cap、coat、weapon、face…）。
+    pub category: &'static str,
+    /// 武器種類代碼（oneHandedSword、bow…）；不是已知武器時為 None。
+    pub weapon_type: Option<&'static str>,
     /// 圖示的 PNG base64：`info/icon`，髮型/臉型則是預設外觀圖；取圖失敗時為 None。
     pub icon_base64: Option<String>,
     pub required_level: i64,
@@ -71,11 +69,14 @@ pub struct ItemTooltip {
     pub required_dex: i64,
     pub required_int: i64,
     pub required_luk: i64,
-    pub required_jobs: Vec<String>,
-    pub attribute_lines: Vec<String>,
-    pub attack_speed_label: Option<String>,
+    /// 可裝備的職業代碼（beginner、warrior、magician、bowman、thief、pirate）。
+    pub required_jobs: Vec<&'static str>,
+    /// 道具屬性代碼（only、cash、timeLimited、tradeBlock、accountSharable、onlyEquip）。
+    pub attributes: Vec<&'static str>,
+    /// `info/attackSpeed` 原始值。
+    pub attack_speed: Option<i64>,
     pub scroll_count: Option<i64>,
-    pub stat_lines: Vec<TooltipStatLine>,
+    pub stats: Vec<TooltipStat>,
 }
 
 impl DataService {
@@ -166,21 +167,16 @@ impl DataService {
 
         let numeric_id = item_id.parse::<u32>().unwrap_or(0);
         let names = self.item_names()?;
-        let (name, description) = names
+        let (title, description) = names
             .get(&numeric_id)
             .map(|(n, d)| (n.clone(), d.clone()))
             .unwrap_or_else(|| (item_id.clone(), None));
-        let mut title = name;
-        match prop_i64(info, "reqGender") {
-            Some(0) => title.push_str(" (男)"),
-            Some(1) => title.push_str(" (女)"),
-            _ => {}
-        }
+        let req_gender = prop_i64(info, "reqGender").filter(|gender| matches!(gender, 0 | 1));
 
         let icon_base64 = self.tooltip_icon(&root_path, &item_id, &category_hint)?;
 
-        let category_line = gear_category_line(&item_id, &category_hint);
-        let attack_speed_label = prop_i64(info, "attackSpeed").map(attack_speed_label);
+        let category = gear_category(&item_id, &category_hint);
+        let weapon_type = weapon_type(&item_id);
         let scroll_count = prop_i64(info, "tuc");
 
         Ok(Some(ItemTooltip {
@@ -188,18 +184,20 @@ impl DataService {
             img_path: root_path,
             title,
             description: description.filter(|d| !d.trim().is_empty()),
-            category_line,
+            req_gender,
+            category,
+            weapon_type,
             icon_base64,
             required_level: prop_i64(info, "reqLevel").unwrap_or(0),
             required_str: prop_i64(info, "reqSTR").unwrap_or(0),
             required_dex: prop_i64(info, "reqDEX").unwrap_or(0),
             required_int: prop_i64(info, "reqINT").unwrap_or(0),
             required_luk: prop_i64(info, "reqLUK").unwrap_or(0),
-            required_jobs: required_job_labels(prop_i64(info, "reqJob")),
-            attribute_lines: gear_attribute_lines(info),
-            attack_speed_label,
+            required_jobs: required_jobs(prop_i64(info, "reqJob")),
+            attributes: gear_attributes(info),
+            attack_speed: prop_i64(info, "attackSpeed"),
             scroll_count,
-            stat_lines: gear_stat_lines(info),
+            stats: gear_stats(info),
         }))
     }
 
@@ -323,90 +321,54 @@ fn value_as_i64(value: &Value) -> Option<i64> {
     }
 }
 
-fn gear_attribute_lines(info: &WzNode) -> Vec<String> {
-    let mut lines = Vec::new();
+fn gear_attributes(info: &WzNode) -> Vec<&'static str> {
+    let mut attributes = Vec::new();
     if prop_bool(info, "only") {
-        lines.push("專屬道具".to_string());
+        attributes.push("only");
     }
     if prop_bool(info, "cash") {
-        lines.push("點數道具".to_string());
+        attributes.push("cash");
     }
     if prop_bool(info, "timeLimited") {
-        lines.push("限時道具".to_string());
+        attributes.push("timeLimited");
     }
     if prop_bool(info, "tradeBlock") {
-        lines.push("不可交易".to_string());
+        attributes.push("tradeBlock");
     } else if prop_bool(info, "accountSharable") {
-        lines.push("帳號內可移動".to_string());
+        attributes.push("accountSharable");
     }
     if prop_bool(info, "onlyEquip") {
-        lines.push("只能單獨使用".to_string());
+        attributes.push("onlyEquip");
     }
-    lines
+    attributes
 }
 
-fn gear_stat_lines(info: &WzNode) -> Vec<TooltipStatLine> {
-    GEAR_STAT_LABELS
+fn gear_stats(info: &WzNode) -> Vec<TooltipStat> {
+    GEAR_STAT_KEYS
         .iter()
-        .filter_map(|(name, label)| {
-            let value = prop_i64(info, name)?;
-            if value == 0 {
-                return None;
-            }
-            Some(TooltipStatLine {
-                label: (*label).to_string(),
-                value: if value > 0 {
-                    format!("+{value}")
-                } else {
-                    value.to_string()
-                },
-            })
+        .filter_map(|&key| {
+            let value = prop_i64(info, key)?;
+            (value != 0).then_some(TooltipStat { key, value })
         })
         .collect()
 }
 
-fn required_job_labels(req_job: Option<i64>) -> Vec<String> {
-    let all = || {
-        ALL_JOB_LABELS
-            .iter()
-            .map(|label| (*label).to_string())
-            .collect()
-    };
+fn required_jobs(req_job: Option<i64>) -> Vec<&'static str> {
     match req_job {
-        None | Some(0) => all(),
+        None | Some(0) => ALL_JOBS.to_vec(),
         Some(job) => {
-            let labels: Vec<String> = JOB_MASK_LABELS
+            let jobs: Vec<&'static str> = JOB_MASKS
                 .iter()
                 .filter(|(mask, _)| job & mask != 0)
-                .map(|(_, label)| (*label).to_string())
+                .map(|&(_, code)| code)
                 .collect();
-            if labels.is_empty() {
-                all()
+            if jobs.is_empty() {
+                ALL_JOBS.to_vec()
             } else {
-                labels
+                jobs
             }
         }
     }
-}
-
-fn attack_speed_label(value: i64) -> String {
-    match value {
-        2 | 3 => "比較快".to_string(),
-        4 | 5 => "快".to_string(),
-        6 => "普通".to_string(),
-        7 | 8 => "慢".to_string(),
-        9 => "比較慢".to_string(),
-        value if value < 2 => "非常快".to_string(),
-        _ => "非常慢".to_string(),
-    }
-}
-
-/// 裝備分類行：武器給「武器分類 : 單手劍」，其餘給「裝備分類 : 帽子」。
-fn gear_category_line(item_id: &str, category_hint: &str) -> String {
-    if let Some(weapon_label) = weapon_type_label(item_id) {
-        return format!("武器分類 : {weapon_label}");
-    }
-    format!("裝備分類 : {}", gear_category_label(item_id, category_hint))
 }
 
 /// 8 碼裝備 id 的前 3 位分類碼（id 開頭必為 0，例如 01302000 → 130）。
@@ -414,73 +376,99 @@ fn id_prefix3(item_id: &str) -> u32 {
     item_id.parse::<u32>().unwrap_or(0) / 10000
 }
 
-fn gear_category_label(item_id: &str, category_hint: &str) -> String {
+/// 裝備分類代碼：先看 id 分類碼，再看所在目錄名。
+fn gear_category(item_id: &str, category_hint: &str) -> &'static str {
     match id_prefix3(item_id) {
-        100 => "帽子".to_string(),
-        101 => "臉飾".to_string(),
-        102 => "眼飾".to_string(),
-        103 => "耳環".to_string(),
-        104 => "上衣".to_string(),
-        105 => "套服".to_string(),
-        106 => "褲子".to_string(),
-        107 => "鞋子".to_string(),
-        108 => "手套".to_string(),
-        109 => "盾牌".to_string(),
-        110 => "披風".to_string(),
-        111 => "戒指".to_string(),
-        112 => "吊墜".to_string(),
-        113 => "腰帶".to_string(),
-        114 => "勳章".to_string(),
-        115 => "肩飾".to_string(),
-        121..=159 => "武器".to_string(),
+        100 => "cap",
+        101 => "faceAccessory",
+        102 => "eyeAccessory",
+        103 => "earrings",
+        104 => "coat",
+        105 => "longcoat",
+        106 => "pants",
+        107 => "shoes",
+        108 => "glove",
+        109 => "shield",
+        110 => "cape",
+        111 => "ring",
+        112 => "pendant",
+        113 => "belt",
+        114 => "medal",
+        115 => "shoulder",
+        121..=159 => "weapon",
         _ => match category_hint.to_lowercase().as_str() {
-            "accessory" => "飾品".to_string(),
-            "cap" => "帽子".to_string(),
-            "coat" => "上衣".to_string(),
-            "longcoat" => "套服".to_string(),
-            "pants" => "褲子".to_string(),
-            "shoes" => "鞋子".to_string(),
-            "glove" => "手套".to_string(),
-            "shield" => "盾牌".to_string(),
-            "cape" => "披風".to_string(),
-            "weapon" => "武器".to_string(),
-            "ring" => "戒指".to_string(),
-            "petequip" => "寵物裝備".to_string(),
-            "tamingmob" => "騎寵".to_string(),
-            "face" => "臉型".to_string(),
-            "hair" => "髮型".to_string(),
+            "accessory" => "accessory",
+            "cap" => "cap",
+            "coat" => "coat",
+            "longcoat" => "longcoat",
+            "pants" => "pants",
+            "shoes" => "shoes",
+            "glove" => "glove",
+            "shield" => "shield",
+            "cape" => "cape",
+            "weapon" => "weapon",
+            "ring" => "ring",
+            "petequip" => "petEquip",
+            "tamingmob" => "tamingMob",
+            "face" => "face",
+            "hair" => "hair",
             _ => {
                 // Character 直屬的 0002xxxx（臉型）/0003~0005（髮型）。
                 match item_id.parse::<u32>().unwrap_or(0) / 10000 {
-                    2 => "臉型".to_string(),
-                    3..=5 => "髮型".to_string(),
-                    _ => "裝備".to_string(),
+                    2 => "face",
+                    3..=5 => "hair",
+                    _ => "equip",
                 }
             }
         },
     }
 }
 
-fn weapon_type_label(item_id: &str) -> Option<&'static str> {
+/// 武器種類代碼；前端有此代碼時顯示「武器分類」，否則顯示「裝備分類」。
+fn weapon_type(item_id: &str) -> Option<&'static str> {
     match id_prefix3(item_id) {
-        130 => Some("單手劍"),
-        131 => Some("單手斧"),
-        132 => Some("單手棍"),
-        133 => Some("短劍"),
-        134 => Some("刀"),
-        136 => Some("手杖"),
-        137 => Some("短杖"),
-        138 => Some("長杖"),
-        140 => Some("雙手劍"),
-        141 => Some("雙手斧"),
-        142 => Some("雙手棍"),
-        143 => Some("槍"),
-        144 => Some("矛"),
-        145 => Some("弓"),
-        146 => Some("弩"),
-        147 => Some("拳套"),
-        148 => Some("指虎"),
-        149 => Some("火槍"),
+        130 => Some("oneHandedSword"),
+        131 => Some("oneHandedAxe"),
+        132 => Some("oneHandedBlunt"),
+        133 => Some("dagger"),
+        134 => Some("katara"),
+        136 => Some("cane"),
+        137 => Some("wand"),
+        138 => Some("staff"),
+        140 => Some("twoHandedSword"),
+        141 => Some("twoHandedAxe"),
+        142 => Some("twoHandedBlunt"),
+        143 => Some("spear"),
+        144 => Some("polearm"),
+        145 => Some("bow"),
+        146 => Some("crossbow"),
+        147 => Some("claw"),
+        148 => Some("knuckle"),
+        149 => Some("gun"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn required_jobs_map_masks_and_fall_back_to_all() {
+        assert_eq!(required_jobs(None), ALL_JOBS);
+        assert_eq!(required_jobs(Some(0)), ALL_JOBS);
+        assert_eq!(required_jobs(Some(1 | 8)), ["warrior", "thief"]);
+        // 只有未知位元時視同無限制。
+        assert_eq!(required_jobs(Some(64)), ALL_JOBS);
+    }
+
+    #[test]
+    fn category_prefers_id_prefix_then_directory() {
+        assert_eq!(gear_category("01302000", "Weapon"), "weapon");
+        assert_eq!(weapon_type("01302000"), Some("oneHandedSword"));
+        assert_eq!(gear_category("01002000", ""), "cap");
+        assert_eq!(gear_category("01802000", "PetEquip"), "petEquip");
+        assert_eq!(gear_category("00030000", ""), "hair");
+        assert_eq!(weapon_type("01352000"), None);
     }
 }

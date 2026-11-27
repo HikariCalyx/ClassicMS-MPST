@@ -5,6 +5,7 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from "react";
+import { useI18n } from "../i18n";
 
 interface ImagePreviewProps {
   alt: string;
@@ -42,6 +43,7 @@ export function ImagePreview({
   mode = "exact",
   note,
 }: ImagePreviewProps) {
+  const { t } = useI18n();
   const stageRef = useRef<HTMLDivElement>(null);
   const dragOriginRef = useRef<Point | null>(null);
   const [loadedSize, setLoadedSize] = useState<ImageSize | null>(null);
@@ -115,25 +117,28 @@ export function ImagePreview({
   };
 
   return (
-    <section className="image-editor" aria-label="圖片預覽">
+    <section className="image-editor" aria-label={t("browse.image.title")}>
       <div className="image-editor-toolbar">
         <div className="image-editor-title">
-          <strong>圖片預覽</strong>
+          <strong>{t("browse.image.title")}</strong>
           {imageSize ? (
             <span>
-              原始 {imageSize.width} × {imageSize.height} px
+              {t("browse.image.originalSize", {
+                width: imageSize.width,
+                height: imageSize.height,
+              })}
             </span>
           ) : null}
           {mode === "atlas" ? (
             <span className="atlas-preview-badge" title={note ?? undefined}>
-              完整 Atlas
+              {t("browse.image.atlasBadge")}
             </span>
           ) : null}
         </div>
         <div className="image-editor-actions">
           <button
             type="button"
-            aria-label="縮小圖片"
+            aria-label={t("browse.image.zoomOut")}
             disabled={!imageUrl}
             onClick={() => adjustZoom(zoom / 1.2)}
           >
@@ -143,7 +148,7 @@ export function ImagePreview({
             className="zoom-readout"
             type="button"
             disabled={!imageUrl}
-            title="相對於原始像素尺寸；按一下重設為 100%"
+            title={t("browse.image.zoomReset")}
             onClick={() => {
               setZoom(1);
               setOffset({ x: 0, y: 0 });
@@ -153,7 +158,7 @@ export function ImagePreview({
           </button>
           <button
             type="button"
-            aria-label="放大圖片"
+            aria-label={t("browse.image.zoomIn")}
             disabled={!imageUrl}
             onClick={() => adjustZoom(zoom * 1.2)}
           >
@@ -163,10 +168,10 @@ export function ImagePreview({
             className="fit-button"
             type="button"
             disabled={!imageUrl}
-            title="縮放至填滿預覽區域（大圖縮小、小圖放大）"
+            title={t("browse.image.fitTitle")}
             onClick={() => fitImage()}
           >
-            適合視窗
+            {t("browse.image.fit")}
           </button>
         </div>
       </div>
@@ -211,10 +216,10 @@ export function ImagePreview({
         ) : (
           <div className="image-editor-message">
             {loading
-              ? "正在載入圖片…"
+              ? t("browse.image.loading")
               : errorMessage
-                ? `圖片解析失敗：${errorMessage}`
-                : "這個節點沒有可預覽的圖片"}
+                ? t("browse.image.decodeFailed", { error: errorMessage })
+                : t("browse.image.none")}
           </div>
         )}
       </div>
@@ -222,9 +227,7 @@ export function ImagePreview({
         className={`image-editor-footer${mode === "atlas" ? " is-atlas" : ""}`}
         title={mode === "atlas" ? (note ?? undefined) : undefined}
       >
-        {mode === "atlas"
-          ? "無法定位唯一 frame，目前顯示完整 Atlas 頁"
-          : "滾輪縮放 · 拖曳平移 · 雙擊適合視窗"}
+        {mode === "atlas" ? t("browse.image.atlasHint") : t("browse.image.controlsHint")}
       </div>
     </section>
   );

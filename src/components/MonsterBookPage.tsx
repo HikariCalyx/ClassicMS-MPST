@@ -13,6 +13,7 @@ import {
   type MonsterSummary,
 } from "../api";
 import { compareDropSourceMobs, loadMonsterBookOnce } from "../dropSources";
+import { useI18n, type TFunction } from "../i18n";
 import { QUEST_ITEM_DROPS, questDropItemIdsForMob } from "../questDrops";
 import { DropSourcesDialog, type DropSourceItem, type MobThumbCache } from "./DropSourcesDialog";
 import { DropItemTooltip, ItemTooltip } from "./ItemTooltip";
@@ -39,6 +40,7 @@ function loadMobFrameImage(frame: MobFrame): Promise<HTMLImageElement> {
 
 /** Mob 動畫：逐幀播放，各幀以 origin 對齊（取全幀 bounding box）避免跳動。 */
 function MobSprite({ frames, playing }: { frames: MobFrame[]; playing: boolean }) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [images, setImages] = useState<HTMLImageElement[] | null>(null);
   const [box, setBox] = useState<{ left: number; top: number; width: number; height: number } | null>(
@@ -108,7 +110,7 @@ function MobSprite({ frames, playing }: { frames: MobFrame[]; playing: boolean }
   }, [images, box, frames, playing]);
 
   if (frames.length === 0 || !box) {
-    return <div className="monster-sprite-empty">無動畫資料</div>;
+    return <div className="monster-sprite-empty">{t("monster.sprite.noAnimation")}</div>;
   }
   // 像素圖整數倍放大（對齊紙娃娃 2x 預覽）；太大才縮小放進框裡。
   const scale = Math.min(4, Math.max(1, Math.floor(160 / Math.max(box.width, box.height))));
@@ -187,8 +189,9 @@ const MonsterList = memo(function MonsterList({
   onSchedulePrefetch: (mobId: number) => void;
   onCancelPrefetch: () => void;
 }) {
+  const { t } = useI18n();
   return (
-    <div className="monster-list" role="listbox" aria-label="怪物清單">
+    <div className="monster-list" role="listbox" aria-label={t("monster.list.label")}>
       {entries.map((entry) => (
         <button
           key={entry.mobId}
@@ -202,7 +205,7 @@ const MonsterList = memo(function MonsterList({
           onPointerEnter={() => onSchedulePrefetch(entry.mobId)}
           onPointerLeave={onCancelPrefetch}
         >
-          <span className="monster-list-name">{entry.name ?? "（未命名）"}</span>
+          <span className="monster-list-name">{entry.name ?? t("common.unnamed")}</span>
           <span className="monster-list-meta">
             {entry.level !== null ? `Lv.${entry.level}` : "Lv.?"}
           </span>
@@ -210,25 +213,27 @@ const MonsterList = memo(function MonsterList({
         </button>
       ))}
       {entries.length === 0 ? (
-        <p className="monster-list-empty">沒有符合「{query}」的怪物</p>
+        <p className="monster-list-empty">{t("monster.list.noMatch", { query })}</p>
       ) : null}
     </div>
   );
 });
 
-/** 戰利品分組：依道具 id 首位分 裝備(1) / 消耗(2) / 其他（3~5、9 等）。 */
-const DROP_GROUP_ORDER = ["裝備", "消耗", "其他"] as const;
+/** 戰利品分組：依道具 id 首位分 裝備(1) / 消耗(2) / 其他（3~5、9 等）。
+ *  分組用代碼，標籤在渲染時依介面語言翻譯（monster.dropGroup.*）。 */
+const DROP_GROUP_ORDER = ["equip", "use", "etc"] as const;
 
 type DropGroup = (typeof DROP_GROUP_ORDER)[number];
 
 function dropGroup(itemId: number): DropGroup {
   const prefix = Math.floor(itemId / 1_000_000);
-  if (prefix === 1) return "裝備";
-  if (prefix === 2) return "消耗";
-  return "其他";
+  if (prefix === 1) return "equip";
+  if (prefix === 2) return "use";
+  return "etc";
 }
 
-function statRows(detail: MobDetail): [string, string][] {
+/** 能力值列（渲染時呼叫）：HP / MP / EXP 照原樣顯示，其餘標籤依介面語言翻譯。 */
+function statRows(detail: MobDetail, t: TFunction): [string, string][] {
   const rows: [string, string][] = [];
   const push = (label: string, value: number) => {
     if (value !== 0) rows.push([label, value.toLocaleString()]);
@@ -236,14 +241,14 @@ function statRows(detail: MobDetail): [string, string][] {
   push("HP", detail.maxHp);
   push("MP", detail.maxMp);
   push("EXP", detail.exp);
-  push("物理攻擊", detail.pad);
-  push("物理防禦", detail.pdd);
-  push("魔法攻擊", detail.mad);
-  push("魔法防禦", detail.mdd);
-  push("命中", detail.acc);
-  push("迴避", detail.eva);
-  push("速度", detail.speed);
-  push("擊退", detail.pushed);
+  push(t("monster.stats.pad"), detail.pad);
+  push(t("monster.stats.pdd"), detail.pdd);
+  push(t("monster.stats.mad"), detail.mad);
+  push(t("monster.stats.mdd"), detail.mdd);
+  push(t("monster.stats.acc"), detail.acc);
+  push(t("monster.stats.eva"), detail.eva);
+  push(t("monster.stats.speed"), detail.speed);
+  push(t("monster.stats.pushed"), detail.pushed);
   return rows;
 }
 
@@ -261,6 +266,7 @@ export function MonsterBookPage({
   jumpToMob?: { mobId: number; nonce: number } | null;
   onJumpToMobHandled?: () => void;
 }) {
+  const { t } = useI18n();
   const [book, setBook] = useState<MonsterSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -324,7 +330,7 @@ export function MonsterBookPage({
     // tooltip 以左下角為原點向上長（CSS translateY(-100%)）。
     const x = Math.min(event.clientX + 16, Math.max(0, window.innerWidth - 360));
     const y = event.clientY - 8;
-    const gear = dropGroup(itemId) === "裝備";
+    const gear = dropGroup(itemId) === "equip";
     const present = (tip: ItemTooltipData) => {
       // 字串表缺名時（如寵物）標題會是原始 id，改用戰利品清單的名稱。
       const titled =
@@ -527,9 +533,11 @@ export function MonsterBookPage({
 
   let content;
   if (loadError) {
-    content = <p className="monster-page-status">怪物圖鑑資料載入失敗：{loadError}</p>;
+    content = (
+      <p className="monster-page-status">{t("monster.page.loadFailed", { error: loadError })}</p>
+    );
   } else if (!book) {
-    content = <p className="monster-page-status">正在載入怪物圖鑑…</p>;
+    content = <p className="monster-page-status">{t("monster.page.loading")}</p>;
   } else {
     content = (
       <>
@@ -538,8 +546,8 @@ export function MonsterBookPage({
             <input
               type="search"
               value={query}
-              placeholder="搜尋怪物、ID 或掉落物…"
-              aria-label="搜尋怪物"
+              placeholder={t("monster.search.placeholder")}
+              aria-label={t("monster.search.label")}
               onChange={(event) => setQuery(event.target.value)}
             />
             <span className="monster-search-count">
@@ -559,14 +567,16 @@ export function MonsterBookPage({
         <section className="monster-detail" aria-busy={detailLoading}>
           {detailLoading && detail ? (
             <span className="monster-detail-loading" role="status">
-              正在切換怪物…
+              {t("monster.detail.switching")}
             </span>
           ) : null}
           {detailError ? (
-            <p className="monster-page-status">怪物資料載入失敗：{detailError}</p>
+            <p className="monster-page-status">
+              {t("monster.detail.loadFailed", { error: detailError })}
+            </p>
           ) : !detail ? (
             <p className="monster-page-status">
-              {detailLoading ? "正在載入怪物資料…" : "從左邊選擇一隻怪物"}
+              {detailLoading ? t("monster.detail.loading") : t("monster.detail.selectPrompt")}
             </p>
           ) : (
             <div className="monster-detail-scroll">
@@ -575,17 +585,23 @@ export function MonsterBookPage({
                   <MobSprite frames={detail.frames} playing={visible} />
                 </div>
                 <div className="monster-hero-text">
-                  <h2>{detail.name ?? "（未命名）"}</h2>
+                  <h2>{detail.name ?? t("common.unnamed")}</h2>
                   <p className="monster-hero-id">{detail.mobId}</p>
                   <div className="monster-hero-chips">
                     {detail.level !== null ? (
                       <span className="monster-chip">Lv.{detail.level}</span>
                     ) : null}
                     {detail.category ? (
-                      <span className="monster-chip">型態：{detail.category}</span>
+                      <span className="monster-chip">
+                        {t("monster.hero.category", { category: detail.category })}
+                      </span>
                     ) : null}
-                    {detail.bodyAttack ? <span className="monster-chip">身體攻擊</span> : null}
-                    {detail.undead ? <span className="monster-chip">不死族</span> : null}
+                    {detail.bodyAttack ? (
+                      <span className="monster-chip">{t("monster.hero.bodyAttack")}</span>
+                    ) : null}
+                    {detail.undead ? (
+                      <span className="monster-chip">{t("monster.hero.undead")}</span>
+                    ) : null}
                   </div>
                   {detail.description ? (
                     <p className="monster-description">{detail.description}</p>
@@ -593,11 +609,11 @@ export function MonsterBookPage({
                 </div>
               </header>
 
-              {statRows(detail).length > 0 ? (
+              {statRows(detail, t).length > 0 ? (
                 <section className="monster-section">
-                  <h3>能力值</h3>
+                  <h3>{t("monster.stats.title")}</h3>
                   <dl className="monster-stats">
-                    {statRows(detail).map(([label, value]) => (
+                    {statRows(detail, t).map(([label, value]) => (
                       <div key={label} className="monster-stat">
                         <dt>{label}</dt>
                         <dd>{value}</dd>
@@ -609,9 +625,9 @@ export function MonsterBookPage({
 
               <section className="monster-section">
                 <h3>
-                  戰利品（{visibleDrops.length}）
+                  {t("monster.drops.title", { count: visibleDrops.length })}
                   {visibleDrops.length > 0 ? (
-                    <span className="monster-section-hint">點擊道具可查看掉落怪物</span>
+                    <span className="monster-section-hint">{t("monster.drops.hint")}</span>
                   ) : null}
                 </h3>
                 {visibleDrops.length > 0 ? (
@@ -623,7 +639,10 @@ export function MonsterBookPage({
                     return (
                       <div key={group} className="monster-drop-group">
                         <h4>
-                          {group}（{items.length}）
+                          {t("monster.drops.group", {
+                            group: t(`monster.dropGroup.${group}`),
+                            count: items.length,
+                          })}
                         </h4>
                         <div className="monster-drops">
                           {items.map((drop) => (
@@ -631,7 +650,7 @@ export function MonsterBookPage({
                               key={drop.itemId}
                               type="button"
                               className="monster-drop"
-                              title="查看掉落此道具的怪物"
+                              title={t("monster.drops.viewSources")}
                               onClick={() => openDropSources(drop.itemId, drop.name)}
                               onMouseEnter={(event) => showDropTip(drop.itemId, event, drop.name)}
                               onMouseLeave={hideDropTip}
@@ -651,15 +670,15 @@ export function MonsterBookPage({
                     );
                   })
                 ) : (
-                  <p className="monster-section-empty">圖鑑沒有此怪物的掉落紀錄</p>
+                  <p className="monster-section-empty">{t("monster.drops.empty")}</p>
                 )}
               </section>
 
               {questDrops.length > 0 ? (
                 <section className="monster-section">
                   <h3>
-                    任務道具（{questDrops.length}）
-                    <span className="monster-section-hint">點擊道具可查看掉落怪物</span>
+                    {t("monster.questDrops.title", { count: questDrops.length })}
+                    <span className="monster-section-hint">{t("monster.drops.hint")}</span>
                   </h3>
                   <div className="monster-drops">
                     {questDrops.map((drop) => (
@@ -667,7 +686,7 @@ export function MonsterBookPage({
                         key={drop.itemId}
                         type="button"
                         className="monster-drop"
-                        title="查看掉落此道具的怪物"
+                        title={t("monster.drops.viewSources")}
                         onClick={() => openDropSources(drop.itemId, drop.name)}
                         onMouseEnter={(event) => showDropTip(drop.itemId, event, drop.name)}
                         onMouseLeave={hideDropTip}
@@ -688,7 +707,7 @@ export function MonsterBookPage({
 
               {detail.maps.length > 0 ? (
                 <section className="monster-section">
-                  <h3>出沒地圖（{detail.maps.length}）</h3>
+                  <h3>{t("monster.maps.title", { count: detail.maps.length })}</h3>
                   <div className="monster-maps">
                     {detail.maps.map((map) => (
                       <span key={map.mapId} className="monster-chip" title={String(map.mapId)}>

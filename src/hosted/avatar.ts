@@ -9,6 +9,7 @@
 
 import { DATA_ROOT, fetchChecked, findNode, loadTree, resolveUolTarget } from "./core";
 import type { TreeNode } from "./core";
+import { t } from "../i18n";
 import type {
   AvatarFrame,
   AvatarFrames,
@@ -800,11 +801,11 @@ export async function getAvatarFrames(
       resolved.push(rp);
     } else if (part.slot === "body" || part.slot === "head") {
       // body/head 是紙娃娃本體，缺了直接算錯；其餘部位缺資料就略過
-      throw new Error(`${part.slot} ${part.id} 無可用動作 ${action}`);
+      throw new Error(t("data.error.partNoAction", { slot: part.slot, id: part.id, action }));
     }
   }
   const body = resolved.find((p) => p.slot === "body");
-  if (!body) throw new Error("缺少 body 部位");
+  if (!body) throw new Error(t("data.error.missingBody"));
   const bodyFrameCount = body.frames.length;
   const bodyDelays = body.frames.map((rel) => {
     const node = findNode(body.tree, rel);

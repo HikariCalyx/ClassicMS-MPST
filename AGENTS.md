@@ -34,6 +34,10 @@
   `npm run deploy:hosted`。
 - hosted 資料集（R2）不在自動佈署範圍內：資料有變動時仍需手動跑
   `node scripts/upload_hosted.mjs <version>` 上傳。
+- 桌面安裝檔由 `.github/workflows/release.yml` 產生：推送與 `tauri.conf.json`
+  版本相符的 `vX.Y.Z` tag 會建置 Windows NSIS 與 macOS 通用版 DMG 並附到
+  同一個 Release；手動 dispatch 只留 artifact。macOS 的 bundle target 由
+  `src-tauri/tauri.macos.conf.json` 覆寫。
 
 ## 測試分工（使用者要求）
 

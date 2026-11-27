@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getMobDetail, getMobDropIcon, type MonsterSummary } from "../api";
+import { useI18n } from "../i18n";
 
 export interface DropSourceItem {
   itemId: number;
@@ -85,6 +86,7 @@ export function DropSourcesDialog({
   onPick: (mobId: number) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [itemIcon, setItemIcon] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,7 +115,7 @@ export function DropSourcesDialog({
         className="drop-sources-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={`掉落 ${item.name ?? item.itemId} 的怪物`}
+        aria-label={t("monster.sources.dialogLabel", { item: item.name ?? item.itemId })}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="drop-sources-header">
@@ -123,14 +125,16 @@ export function DropSourcesDialog({
             ) : null}
           </span>
           <h2>{item.name ?? item.itemId}</h2>
-          <span className="drop-sources-count">共 {sources.length} 隻怪物掉落</span>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="關閉">
+          <span className="drop-sources-count">
+            {t("monster.sources.count", { count: sources.length })}
+          </span>
+          <button className="icon-button" type="button" onClick={onClose} aria-label={t("common.close")}>
             ✕
           </button>
         </header>
         <div className="drop-sources-grid">
           {sources.length === 0 ? (
-            <p className="drop-sources-empty">沒有已知的掉落來源</p>
+            <p className="drop-sources-empty">{t("monster.sources.empty")}</p>
           ) : null}
           {sources.map((mob) => {
             const current = mob.mobId === currentMobId;
@@ -144,10 +148,10 @@ export function DropSourcesDialog({
                 onClick={() => onPick(mob.mobId)}
               >
                 <MobThumb mobId={mob.mobId} cache={thumbCache} />
-                <span className="drop-source-name">{mob.name ?? "（未命名）"}</span>
+                <span className="drop-source-name">{mob.name ?? t("common.unnamed")}</span>
                 <span className="drop-source-meta">
                   {mob.level !== null ? `Lv.${mob.level}` : "Lv.?"}
-                  {current ? <em>檢視中</em> : null}
+                  {current ? <em>{t("monster.sources.current")}</em> : null}
                 </span>
               </button>
             );

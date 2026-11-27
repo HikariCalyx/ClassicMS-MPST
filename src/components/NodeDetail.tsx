@@ -20,6 +20,7 @@ import { ImagePreview } from "./ImagePreview";
 import { ItemTooltip } from "./ItemTooltip";
 import { CommodityShop } from "./CommodityShop";
 import { createDatasetCache, getActiveLocale, onDatasetChange } from "../locale";
+import { useI18n } from "../i18n";
 
 interface NodeDetailProps {
   path: string | null;
@@ -166,6 +167,7 @@ function AutoTextarea({ value }: { value: string }) {
 // TextAsset 檢視器：高度撐到 .app-right 可視區底部，並支援 Ctrl+F 在內容裡搜尋
 // （Enter 下一筆、Shift+Enter 上一筆、Esc 關閉，命中筆會選取並捲到可視範圍）。
 export function TextAssetCard({ text }: { text: string }) {
+  const { t } = useI18n();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -264,7 +266,7 @@ export function TextAssetCard({ text }: { text: string }) {
             <input
               ref={findInputRef}
               type="text"
-              placeholder="搜尋內容…"
+              placeholder={t("browse.textFind.placeholder")}
               spellCheck={false}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -283,7 +285,7 @@ export function TextAssetCard({ text }: { text: string }) {
             </span>
             <button
               type="button"
-              title="上一筆（Shift+Enter）"
+              title={t("browse.textFind.previous")}
               disabled={matches.length === 0}
               onClick={() => jumpTo(matchIndex - 1, matches, false)}
             >
@@ -291,19 +293,19 @@ export function TextAssetCard({ text }: { text: string }) {
             </button>
             <button
               type="button"
-              title="下一筆（Enter）"
+              title={t("browse.textFind.next")}
               disabled={matches.length === 0}
               onClick={() => jumpTo(matchIndex + 1, matches, false)}
             >
               ↓
             </button>
-            <button type="button" title="關閉（Esc）" onClick={closeFind}>
+            <button type="button" title={t("browse.textFind.close")} onClick={closeFind}>
               ✕
             </button>
           </div>
         ) : (
           <button type="button" className="find-hint" onClick={openFind}>
-            Ctrl+F 搜尋
+            {t("browse.textFind.open")}
           </button>
         )}
       </header>
@@ -326,6 +328,7 @@ export function TextAssetCard({ text }: { text: string }) {
 
 // AudioClip（type 83）：點開才向後端取 Ogg Vorbis，轉 blob URL 播放，卸載時釋放。
 function AudioPlayer({ path }: { path: string }) {
+  const { t } = useI18n();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -355,7 +358,7 @@ function AudioPlayer({ path }: { path: string }) {
     };
   }, [path]);
 
-  if (loading) return <p>正在載入聲音…</p>;
+  if (loading) return <p>{t("browse.audio.loading")}</p>;
   if (error) return <p className="error">{error}</p>;
   if (!url) return null;
   return <audio controls preload="auto" src={url} style={{ width: "100%" }} />;
@@ -365,6 +368,7 @@ export function NodeDetail({
   path,
   emptyMode = "selection",
 }: NodeDetailProps) {
+  const { t } = useI18n();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -528,20 +532,20 @@ export function NodeDetail({
       return (
         <div className="detail-empty is-category">
           <span className="detail-empty-icon" aria-hidden="true">▣</span>
-          <strong>這是分類節點</strong>
-          <p>分類只用來整理資產；請展開後選擇 img 或其子節點進行預覽。</p>
+          <strong>{t("browse.detail.categoryTitle")}</strong>
+          <p>{t("browse.detail.categoryHint")}</p>
         </div>
       );
     }
     return (
       <div className="detail-empty">
         <span className="detail-empty-icon" aria-hidden="true">◇</span>
-        <strong>選取一個節點開始檢視</strong>
-        <p>使用左側資產樹，或在搜尋列輸入資產名稱與路徑。</p>
+        <strong>{t("browse.detail.emptyTitle")}</strong>
+        <p>{t("browse.detail.emptyHint")}</p>
       </div>
     );
   }
-  if (loading && !detail) return <div className="detail-empty">正在載入節點內容…</div>;
+  if (loading && !detail) return <div className="detail-empty">{t("browse.detail.loading")}</div>;
   if (error) return <div className="detail-empty error">{error}</div>;
   if (!detail) return null;
 
@@ -554,17 +558,17 @@ export function NodeDetail({
     <article className="node-detail-panel">
       <header className="detail-header">
         <div className="detail-heading">
-          <p>節點檢視</p>
+          <p>{t("browse.detail.heading")}</p>
           <input readOnly value={detail.name} title={detail.name} />
         </div>
         <div className="detail-actions">
-          <span className="readonly-badge">唯讀</span>
+          <span className="readonly-badge">{t("browse.detail.readOnly")}</span>
         </div>
       </header>
 
       {showValue ? (
         <div className="detail-heading">
-          <p>節點值</p>
+          <p>{t("browse.detail.value")}</p>
           <input readOnly value={formatValue(detail.value)} title={formatValue(detail.value)} />
         </div>
       ) : null}
@@ -588,22 +592,22 @@ export function NodeDetail({
             <section className="editor-card skill-delay-card">
               <header className="editor-card-heading">
                 <div>
-                  <strong>技能延遲</strong>
+                  <strong>{t("browse.skillDelay.title")}</strong>
                 </div>
               </header>
               <div className="node-editor-form">
                 <label>
-                  <span>動作</span>
+                  <span>{t("browse.skillDelay.action")}</span>
                   <input readOnly value={skillDelay.action} />
                 </label>
                 <label>
-                  <span>總延遲</span>
+                  <span>{t("browse.skillDelay.total")}</span>
                   <input
                     readOnly
                     value={
                       skillDelay.totalDelay != null
                         ? `${skillDelay.totalDelay} ms`
-                        : "（查無動作節點）"
+                        : t("browse.skillDelay.noAction")
                     }
                   />
                 </label>
@@ -615,21 +619,21 @@ export function NodeDetail({
             <section className="editor-card skill-info-card">
               <header className="editor-card-heading">
                 <div>
-                  <strong>技能資訊</strong>
+                  <strong>{t("browse.skillInfo.title")}</strong>
                 </div>
               </header>
               <div className="node-editor-form">
                 <label className="is-wide">
-                  <span>技能名稱</span>
-                  <input readOnly value={skillInfo.name ?? "（查無名稱）"} />
+                  <span>{t("browse.skillInfo.name")}</span>
+                  <input readOnly value={skillInfo.name ?? t("browse.skillInfo.noName")} />
                 </label>
                 <label className="is-wide">
-                  <span>技能描述</span>
-                  <AutoTextarea value={skillInfo.desc ?? "（查無描述）"} />
+                  <span>{t("browse.skillInfo.desc")}</span>
+                  <AutoTextarea value={skillInfo.desc ?? t("browse.skillInfo.noDesc")} />
                 </label>
                 {skillInfo.levelDesc ? (
                   <label className="is-wide">
-                    <span>每級數值</span>
+                    <span>{t("browse.skillInfo.levelDesc")}</span>
                     <AutoTextarea value={skillInfo.levelDesc} />
                   </label>
                 ) : null}
@@ -641,7 +645,7 @@ export function NodeDetail({
             <section className="editor-card audio-player-card">
               <header className="editor-card-heading">
                 <div>
-                  <strong>聲音</strong>
+                  <strong>{t("browse.audio.title")}</strong>
                 </div>
               </header>
               <AudioPlayer path={detail.path} />

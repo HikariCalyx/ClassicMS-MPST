@@ -8,7 +8,7 @@
 import {
   CLASS_AUDIO_CLIP,
   CLASS_TEXT_ASSET,
-  DATA_LABEL,
+  dataLabel,
   DATA_ROOT,
   fetchChecked,
   findNode,
@@ -22,6 +22,7 @@ import {
   splitImgPrefix,
 } from "./core";
 import type { TreeNode } from "./core";
+import { t } from "../i18n";
 
 export { getImage } from "./core";
 
@@ -81,29 +82,42 @@ export interface AudioResult {
   base64: string;
 }
 
-export interface TooltipStatLine {
-  label: string;
-  value: string;
+/** 裝備能力值（`info` 的屬性名與原始數值；標籤由前端依介面語言決定）。 */
+export interface TooltipStat {
+  key: string;
+  value: number;
 }
 
-/** 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。 */
+/**
+ * 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。分類、職業、屬性等只回代碼，
+ * 顯示文字由 ItemTooltip.tsx 依介面語言決定。
+ */
 export interface ItemTooltip {
   itemId: string;
   imgPath: string;
+  /** 道具名稱（字串表缺名時為 itemId）。 */
   title: string;
   description: string | null;
-  categoryLine: string;
+  /** 性別限制：0 = 男、1 = 女；沒有限制為 null。 */
+  reqGender: number | null;
+  /** 裝備分類代碼（cap、coat、weapon、face…）。 */
+  category: string;
+  /** 武器種類代碼（oneHandedSword、bow…）；不是已知武器時為 null。 */
+  weaponType: string | null;
   iconBase64: string | null;
   requiredLevel: number;
   requiredStr: number;
   requiredDex: number;
   requiredInt: number;
   requiredLuk: number;
+  /** 可裝備的職業代碼（beginner、warrior、magician、bowman、thief、pirate）。 */
   requiredJobs: string[];
-  attributeLines: string[];
-  attackSpeedLabel: string | null;
+  /** 道具屬性代碼（only、cash、timeLimited、tradeBlock、accountSharable、onlyEquip）。 */
+  attributes: string[];
+  /** `info/attackSpeed` 原始值。 */
+  attackSpeed: number | null;
   scrollCount: number | null;
-  statLines: TooltipStatLine[];
+  stats: TooltipStat[];
 }
 
 export interface ExportStats {
@@ -120,13 +134,16 @@ export interface FileExportResult {
   nodes: number;
 }
 
+/** 匯入進度（OPFS 複製 / 索引建立）：只帶階段與數字，訊息文字由 App 依介面語言組字。 */
 export interface ImportProgress {
   phase: "copy" | "catalog";
   percent: number;
+  stage: "loadingIndex" | "unchanged" | "copying" | "buildingIndex";
+  /** copying 階段：目前複製的檔名，以及第幾個 / 共幾個。 */
   file?: string;
-  message: string;
+  fileIndex?: number;
+  fileCount?: number;
 }
-
 export interface ExportDialogOptions {
   title: string;
   defaultName: string;
@@ -425,7 +442,7 @@ export const openDataDir = async (_path?: string): Promise<OpenResult> => {
   const index = (await indexResponse.json()) as { version?: string };
   const catalog = (await catalogResponse.json()) as { entries: Record<string, number> };
   const state = initCatalog(catalog.entries);
-  const label = `雲端資料 ${index.version ?? __HOSTED_DATA_VERSION__}`;
+  const label = dataLabel(index.version ?? __HOSTED_DATA_VERSION__);
   return {
     info: {
       from_cache: true,
@@ -462,7 +479,7 @@ export const listChildren = async (path: string): Promise<ChildEntry[]> => {
     const [imgKey, inner] = split;
     const tree = await loadTree(imgKey);
     const node = findNode(tree, inner);
-    if (!node) throw new Error(`找不到節點：${path}`);
+    if (!node) throw new Error(t("data.error.nodeNotFound", { path }));
     return nodeChildren(state, imgKey, inner, node);
   }
   // WZJS img 根：列出 tree 根節點的 children。
@@ -473,14 +490,14 @@ export const listChildren = async (path: string): Promise<ChildEntry[]> => {
 export const getNode = async (path: string): Promise<NodeDetail> => {
   const state = requireCatalog();
   const split = splitImgPrefix(state.entries, path);
-  if (!split) throw new Error(`找不到路徑：${path}`);
+  if (!split) throw new Error(t("data.error.pathNotFound", { path }));
   const [imgKey, inner] = split;
   const classId = state.entries[imgKey];
   const name = imgKey.split("/").at(-1) ?? imgKey;
 
   // TextAsset：fetch strings/<path>.json 明文放 text_asset。
   if (classId === CLASS_TEXT_ASSET) {
-    if (inner !== "") throw new Error(`找不到路徑：${path}`);
+    if (inner !== "") throw new Error(t("data.error.pathNotFound", { path }));
     return {
       path,
       name,
@@ -493,7 +510,7 @@ export const getNode = async (path: string): Promise<NodeDetail> => {
   }
   // AudioClip：只回基本資訊，聲音資料由 getAudio 懶載。
   if (classId === CLASS_AUDIO_CLIP) {
-    if (inner !== "") throw new Error(`找不到路徑：${path}`);
+    if (inner !== "") throw new Error(t("data.error.pathNotFound", { path }));
     return {
       path,
       name,
@@ -507,7 +524,7 @@ export const getNode = async (path: string): Promise<NodeDetail> => {
 
   const tree = await loadTree(imgKey);
   const node = findNode(tree, inner);
-  if (!node) throw new Error(`找不到節點：${path}`);
+  if (!node) throw new Error(t("data.error.nodeNotFound", { path }));
   return {
     path,
     name: node.name,
@@ -599,34 +616,34 @@ export { getPetList, getPetEquipList, getPetFrames } from "./pet";
 // export 契約：匯出（hosted 模式不支援；ExportMenu 會用 toast 顯示錯誤）
 // ---------------------------------------------------------------------------
 
-const EXPORT_UNSUPPORTED = "hosted 模式尚未支援匯出";
+const exportUnsupported = () => new Error(t("data.error.exportUnsupported"));
 
 export const exportFile = (
   _path: string,
   _format: ExportFormat,
   _outputPath: string,
-): Promise<FileExportResult> => Promise.reject(new Error(EXPORT_UNSUPPORTED));
+): Promise<FileExportResult> => Promise.reject(exportUnsupported());
 
 export const exportSubtree = (_path: string): Promise<ExportStats> =>
-  Promise.reject(new Error(EXPORT_UNSUPPORTED));
+  Promise.reject(exportUnsupported());
 
 export const pickExportPath = (
   _options: ExportDialogOptions,
-): Promise<string | null> => Promise.reject(new Error(EXPORT_UNSUPPORTED));
+): Promise<string | null> => Promise.reject(exportUnsupported());
 
 export const saveBinaryFile = (
   _defaultName: string,
   _label: string,
   _extension: string,
   _base64: string,
-): Promise<boolean> => Promise.reject(new Error(EXPORT_UNSUPPORTED));
+): Promise<boolean> => Promise.reject(exportUnsupported());
 
 // ---------------------------------------------------------------------------
 // export 契約：啟動 / 雜項
 // ---------------------------------------------------------------------------
 
 /** hosted 模式不用選資料夾：直接回標籤，App 啟動即自動載入。 */
-export const initialDataDir = (): Promise<string | null> => Promise.resolve(DATA_LABEL);
+export const initialDataDir = (): Promise<string | null> => Promise.resolve(dataLabel());
 
 /** hosted 模式沒有匯入進度；回傳 no-op 取消函式。 */
 export const onProgress = (_listener: (progress: ImportProgress | null) => void): (() => void) =>

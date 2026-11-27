@@ -1,0 +1,161 @@
+name: Release
+
+# 推送 vX.Y.Z tag（版本需與 src-tauri/tauri.conf.json 一致）即建置安裝檔並發佈
+# Release；也可在 Actions 頁面手動執行，只產生 artifact 不下載。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      value: ${{ steps.read.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read app version
+        id: read
+        run: |
+          version=$(jq -r '.version' src-tauri/tauri.conf.json)
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "app version: $version"
+
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          APP_VERSION: ${{ steps.read.outputs.value }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$APP_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version $APP_VERSION"
+            exit 1
+          fi
+
+  windows:
+    name: Windows installer
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      APP_VERSION: ${{ needs.version.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-release
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build NSIS installer
+        run: npm run tauri -- build --bundles nsis
+
+      - name: Collect installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $setup = Get-ChildItem target/release/bundle/nsis -Filter *.exe | Select-Object -First 1
+          if (-not $setup) { throw "NSIS installer not found" }
+          Copy-Item $setup.FullName "out/msclassic-$env:APP_VERSION-windows-x64-setup.exe"
+          Get-ChildItem out | Select-Object Name, Length
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer
+          path: out/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS installer
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      APP_VERSION: ${{ needs.version.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-universal
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # src-tauri/tauri.macos.conf.json 會自動合併，把 bundle target 換成 app、dmg。
+      - name: Build universal app and dmg
+        run: npm run tauri -- build --target universal-apple-darwin --bundles app,dmg
+
+      - name: Collect installer
+        run: |
+          mkdir -p out
+          dmg=$(find target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' -print -quit)
+          if [ -z "$dmg" ]; then
+            echo "::error::dmg not found"
+            exit 1
+          fi
+          cp "$dmg" "out/msclassic-$APP_VERSION-macos-universal.dmg"
+          ls -l out
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-installer
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: out/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

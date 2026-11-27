@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "主視窗權限",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save", "opener:default"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "opener:default"
+  ]
 }

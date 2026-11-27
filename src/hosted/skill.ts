@@ -8,6 +8,7 @@
 import type { SkillDetail, SkillJobGroup, Value } from "../api.hosted";
 import { DATA_ROOT, fetchChecked, loadTextAsset, loadTree } from "./core";
 import type { TreeNode } from "./core";
+import { t } from "../i18n";
 
 /** 排除的非玩家 Skill img（對齊 Rust EXCLUDED_JOBS + Dragon/* 前綴）。 */
 const EXCLUDED_JOBS = new Set([
@@ -211,14 +212,14 @@ function leafJson(value: Value): LevelJson {
 export async function getSkillDetail(job: string, skillId: string): Promise<SkillDetail> {
   const imgKey = `Skill/${job}`;
   if (isExcludedJob(job)) {
-    throw new Error(`找不到路徑：${imgKey}`);
+    throw new Error(t("data.error.pathNotFound", { path: imgKey }));
   }
   const tree = await loadTree(imgKey);
 
   const skillRoot = findChild(tree, "skill");
   const skill = skillRoot?.children?.find((node) => sameSkillId(node.name, skillId));
   if (!skill) {
-    throw new Error(`找不到路徑：${imgKey}/skill/${skillId}`);
+    throw new Error(t("data.error.pathNotFound", { path: `${imgKey}/skill/${skillId}` }));
   }
 
   const [strings, delays] = await Promise.all([loadSkillStrings(), loadActionDelays()]);

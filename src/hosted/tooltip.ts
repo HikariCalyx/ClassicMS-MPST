@@ -3,7 +3,7 @@
 // 差異：Rust 只從本機 catalog 查；hosted 版同樣以 catalog 判斷存在性，
 // tree 透過 HTTP 懶載入（loadTree 內建快取與去重）。
 
-import type { ItemTooltip, TooltipStatLine, Value } from "../api.hosted";
+import type { ItemTooltip, TooltipStat, Value } from "../api.hosted";
 import {
   findNode,
   getImage,
@@ -15,35 +15,35 @@ import {
 import type { TreeNode } from "./core";
 
 // ---------------------------------------------------------------------------
-// 對齊 item_tooltip.rs 的常數表
+// 對齊 item_tooltip.rs 的常數表（只輸出代碼，顯示文字由前端依介面語言決定）
 // ---------------------------------------------------------------------------
 
 /** 對齊 MPST 的 GEAR_STAT_LABELS（順序即顯示順序）。 */
-const GEAR_STAT_LABELS: [string, string][] = [
-  ["incSTR", "STR"],
-  ["incDEX", "DEX"],
-  ["incINT", "INT"],
-  ["incLUK", "LUK"],
-  ["incMHP", "MaxHP"],
-  ["incMMP", "MaxMP"],
-  ["incPAD", "攻擊力"],
-  ["incMAD", "魔法攻擊力"],
-  ["incPDD", "物理防禦力"],
-  ["incMDD", "魔法防禦力"],
-  ["incACC", "命中值"],
-  ["incEVA", "迴避值"],
-  ["incSpeed", "移動速度"],
-  ["incJump", "跳躍力"],
-  ["tuc", "可升級次數"],
+const GEAR_STAT_KEYS = [
+  "incSTR",
+  "incDEX",
+  "incINT",
+  "incLUK",
+  "incMHP",
+  "incMMP",
+  "incPAD",
+  "incMAD",
+  "incPDD",
+  "incMDD",
+  "incACC",
+  "incEVA",
+  "incSpeed",
+  "incJump",
+  "tuc",
 ];
 
-const ALL_JOB_LABELS = ["初心者", "劍士", "法師", "弓箭手", "盜賊", "海盜"];
-const JOB_MASK_LABELS: [number, string][] = [
-  [1, "劍士"],
-  [2, "法師"],
-  [4, "弓箭手"],
-  [8, "盜賊"],
-  [16, "海盜"],
+const ALL_JOBS = ["beginner", "warrior", "magician", "bowman", "thief", "pirate"];
+const JOB_MASKS: [number, string][] = [
+  [1, "warrior"],
+  [2, "magician"],
+  [4, "bowman"],
+  [8, "thief"],
+  [16, "pirate"],
 ];
 
 // ---------------------------------------------------------------------------
@@ -205,10 +205,8 @@ async function buildTooltip(
 
   const names = await loadItemNameTable();
   const entry = names.get(numericId);
-  let title = entry?.name ?? itemId;
-  const reqGender = propI64(info, "reqGender");
-  if (reqGender === 0) title += " (男)";
-  else if (reqGender === 1) title += " (女)";
+  const title = entry?.name ?? itemId;
+  const gender = propI64(info, "reqGender");
 
   const description = entry?.desc?.trim() ? entry.desc : null;
   const iconBase64 = await tooltipIcon(rootPath, itemId, categoryHint);
@@ -218,18 +216,20 @@ async function buildTooltip(
     imgPath: rootPath,
     title,
     description,
-    categoryLine: gearCategoryLine(itemId, categoryHint),
+    reqGender: gender === 0 || gender === 1 ? gender : null,
+    category: gearCategory(itemId, categoryHint),
+    weaponType: weaponType(itemId),
     iconBase64,
     requiredLevel: propI64(info, "reqLevel") ?? 0,
     requiredStr: propI64(info, "reqSTR") ?? 0,
     requiredDex: propI64(info, "reqDEX") ?? 0,
     requiredInt: propI64(info, "reqINT") ?? 0,
     requiredLuk: propI64(info, "reqLUK") ?? 0,
-    requiredJobs: requiredJobLabels(propI64(info, "reqJob")),
-    attributeLines: gearAttributeLines(info),
-    attackSpeedLabel: attackSpeedLabel(propI64(info, "attackSpeed")),
+    requiredJobs: requiredJobs(propI64(info, "reqJob")),
+    attributes: gearAttributes(info),
+    attackSpeed: propI64(info, "attackSpeed"),
     scrollCount: propI64(info, "tuc"),
-    statLines: gearStatLines(info),
+    stats: gearStats(info),
   };
 }
 
@@ -263,53 +263,31 @@ async function tooltipIcon(
   return inner ? cutImageBase64(`${rootPath}/${inner}`) : null;
 }
 
-function gearAttributeLines(info: TreeNode): string[] {
-  const lines: string[] = [];
-  if (propBool(info, "only")) lines.push("專屬道具");
-  if (propBool(info, "cash")) lines.push("點數道具");
-  if (propBool(info, "timeLimited")) lines.push("限時道具");
-  if (propBool(info, "tradeBlock")) lines.push("不可交易");
-  else if (propBool(info, "accountSharable")) lines.push("帳號內可移動");
-  if (propBool(info, "onlyEquip")) lines.push("只能單獨使用");
-  return lines;
+function gearAttributes(info: TreeNode): string[] {
+  const attributes: string[] = [];
+  if (propBool(info, "only")) attributes.push("only");
+  if (propBool(info, "cash")) attributes.push("cash");
+  if (propBool(info, "timeLimited")) attributes.push("timeLimited");
+  if (propBool(info, "tradeBlock")) attributes.push("tradeBlock");
+  else if (propBool(info, "accountSharable")) attributes.push("accountSharable");
+  if (propBool(info, "onlyEquip")) attributes.push("onlyEquip");
+  return attributes;
 }
 
-function gearStatLines(info: TreeNode): TooltipStatLine[] {
-  const lines: TooltipStatLine[] = [];
-  for (const [name, label] of GEAR_STAT_LABELS) {
-    const value = propI64(info, name);
+function gearStats(info: TreeNode): TooltipStat[] {
+  const stats: TooltipStat[] = [];
+  for (const key of GEAR_STAT_KEYS) {
+    const value = propI64(info, key);
     if (value == null || value === 0) continue;
-    lines.push({ label, value: value > 0 ? `+${value}` : String(value) });
+    stats.push({ key, value });
   }
-  return lines;
+  return stats;
 }
 
-function requiredJobLabels(reqJob: number | null): string[] {
-  if (reqJob == null || reqJob === 0) return [...ALL_JOB_LABELS];
-  const labels = JOB_MASK_LABELS.filter(([mask]) => reqJob & mask).map(([, label]) => label);
-  return labels.length > 0 ? labels : [...ALL_JOB_LABELS];
-}
-
-function attackSpeedLabel(value: number | null): string | null {
-  if (value == null) return null;
-  if (value < 2) return "非常快";
-  switch (value) {
-    case 2:
-    case 3:
-      return "比較快";
-    case 4:
-    case 5:
-      return "快";
-    case 6:
-      return "普通";
-    case 7:
-    case 8:
-      return "慢";
-    case 9:
-      return "比較慢";
-    default:
-      return "非常慢";
-  }
+function requiredJobs(reqJob: number | null): string[] {
+  if (reqJob == null || reqJob === 0) return [...ALL_JOBS];
+  const jobs = JOB_MASKS.filter(([mask]) => reqJob & mask).map(([, code]) => code);
+  return jobs.length > 0 ? jobs : [...ALL_JOBS];
 }
 
 /** 8 碼裝備 id 的前 3 位分類碼（id 開頭必為 0，例如 01302000 → 130）。 */
@@ -317,113 +295,80 @@ function idPrefix3(itemId: string): number {
   return Math.floor((Number.parseInt(itemId, 10) || 0) / 10000);
 }
 
-/** 裝備分類行：武器給「武器分類 : 單手劍」，其餘給「裝備分類 : 帽子」。 */
-function gearCategoryLine(itemId: string, categoryHint: string): string {
-  const weaponLabel = weaponTypeLabel(itemId);
-  if (weaponLabel) return `武器分類 : ${weaponLabel}`;
-  return `裝備分類 : ${gearCategoryLabel(itemId, categoryHint)}`;
-}
-
-function gearCategoryLabel(itemId: string, categoryHint: string): string {
+/** 裝備分類代碼（對齊 item_tooltip.rs 的 gear_category）：先看 id 分類碼，再看目錄名。 */
+function gearCategory(itemId: string, categoryHint: string): string {
   const prefix = idPrefix3(itemId);
-  if (prefix === 100) return "帽子";
-  if (prefix === 101) return "臉飾";
-  if (prefix === 102) return "眼飾";
-  if (prefix === 103) return "耳環";
-  if (prefix === 104) return "上衣";
-  if (prefix === 105) return "套服";
-  if (prefix === 106) return "褲子";
-  if (prefix === 107) return "鞋子";
-  if (prefix === 108) return "手套";
-  if (prefix === 109) return "盾牌";
-  if (prefix === 110) return "披風";
-  if (prefix === 111) return "戒指";
-  if (prefix === 112) return "吊墜";
-  if (prefix === 113) return "腰帶";
-  if (prefix === 114) return "勳章";
-  if (prefix === 115) return "肩飾";
-  if (prefix >= 121 && prefix <= 159) return "武器";
+  const byPrefix: Record<number, string> = {
+    100: "cap",
+    101: "faceAccessory",
+    102: "eyeAccessory",
+    103: "earrings",
+    104: "coat",
+    105: "longcoat",
+    106: "pants",
+    107: "shoes",
+    108: "glove",
+    109: "shield",
+    110: "cape",
+    111: "ring",
+    112: "pendant",
+    113: "belt",
+    114: "medal",
+    115: "shoulder",
+  };
+  if (byPrefix[prefix]) return byPrefix[prefix];
+  if (prefix >= 121 && prefix <= 159) return "weapon";
   switch (categoryHint.toLowerCase()) {
     case "accessory":
-      return "飾品";
     case "cap":
-      return "帽子";
     case "coat":
-      return "上衣";
     case "longcoat":
-      return "套服";
     case "pants":
-      return "褲子";
     case "shoes":
-      return "鞋子";
     case "glove":
-      return "手套";
     case "shield":
-      return "盾牌";
     case "cape":
-      return "披風";
     case "weapon":
-      return "武器";
     case "ring":
-      return "戒指";
-    case "petequip":
-      return "寵物裝備";
-    case "tamingmob":
-      return "騎寵";
     case "face":
-      return "臉型";
     case "hair":
-      return "髮型";
+      return categoryHint.toLowerCase();
+    case "petequip":
+      return "petEquip";
+    case "tamingmob":
+      return "tamingMob";
     default: {
       // Character 直屬的 0002xxxx（臉型）/0003~0005（髮型）。
-      if (prefix === 2) return "臉型";
-      if (prefix >= 3 && prefix <= 5) return "髮型";
-      return "裝備";
+      if (prefix === 2) return "face";
+      if (prefix >= 3 && prefix <= 5) return "hair";
+      return "equip";
     }
   }
 }
 
-function weaponTypeLabel(itemId: string): string | null {
-  switch (idPrefix3(itemId)) {
-    case 130:
-      return "單手劍";
-    case 131:
-      return "單手斧";
-    case 132:
-      return "單手棍";
-    case 133:
-      return "短劍";
-    case 134:
-      return "刀";
-    case 136:
-      return "手杖";
-    case 137:
-      return "短杖";
-    case 138:
-      return "長杖";
-    case 140:
-      return "雙手劍";
-    case 141:
-      return "雙手斧";
-    case 142:
-      return "雙手棍";
-    case 143:
-      return "槍";
-    case 144:
-      return "矛";
-    case 145:
-      return "弓";
-    case 146:
-      return "弩";
-    case 147:
-      return "拳套";
-    case 148:
-      return "指虎";
-    case 149:
-      return "火槍";
-    default:
-      return null;
-  }
+/** 武器種類代碼（對齊 item_tooltip.rs 的 weapon_type）；不是已知武器回 null。 */
+function weaponType(itemId: string): string | null {
+  const types: Record<number, string> = {
+    130: "oneHandedSword",
+    131: "oneHandedAxe",
+    132: "oneHandedBlunt",
+    133: "dagger",
+    134: "katara",
+    136: "cane",
+    137: "wand",
+    138: "staff",
+    140: "twoHandedSword",
+    141: "twoHandedAxe",
+    142: "twoHandedBlunt",
+    143: "spear",
+    144: "polearm",
+    145: "bow",
+    146: "crossbow",
+    147: "claw",
+    148: "knuckle",
+    149: "gun",
+  };
+  return types[idPrefix3(itemId)] ?? null;
 }
 
 // ---------------------------------------------------------------------------

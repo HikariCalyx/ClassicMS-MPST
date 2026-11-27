@@ -39,12 +39,30 @@ struct AudioResult {
     base64: String,
 }
 
+/// `open_data_dir` 的錯誤。使用者選錯資料夾時帶代碼，由前端依介面語言組字；
+/// 其餘錯誤只有原始訊息（`code` 為 None）。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenDataDirError {
+    code: Option<&'static str>,
+    path: Option<String>,
+    message: String,
+}
+
+impl From<String> for OpenDataDirError {
+    fn from(message: String) -> Self {
+        Self {
+            code: None,
+            path: None,
+            message,
+        }
+    }
+}
+
 impl AppState {
-    fn current_or_open(
-        &self,
-        requested: Option<&Path>,
-    ) -> Result<(Arc<DataService>, OpenInfo), String> {
-        if requested.is_none() {
+    /// `root` 為 None 時取目前開著的資料集；否則開啟已解析好的資料根目錄。
+    fn current_or_open(&self, root: Option<&Path>) -> Result<(Arc<DataService>, OpenInfo), String> {
+        let Some(root) = root else {
             if let Some(service) = self
                 .service
                 .read()
@@ -55,22 +73,18 @@ impl AppState {
                 return Ok((service.clone(), open_info_for(&service)));
             }
             return Err("尚未選擇遊戲資料目錄".into());
-        }
-        let Some(requested) = requested else {
-            return Err("尚未選擇遊戲資料目錄".into());
         };
-        let root = resolve_data_root(requested)?;
 
         // 開檔不持有 service RwLock；gate 只防止多個 command 同時重建相同索引。
         let _gate = self.open_gate.lock().map_err(|error| error.to_string())?;
 
-        if let Some(service) = self.current_matching(&root)? {
+        if let Some(service) = self.current_matching(root)? {
             return Ok((service.clone(), open_info_for(&service)));
         }
 
-        let cache_path = self.cache_path_for(&root);
+        let cache_path = self.cache_path_for(root);
         let (service, info) =
-            DataService::open(&root, &cache_path).map_err(|error| error.to_string())?;
+            DataService::open(root, &cache_path).map_err(|error| error.to_string())?;
         let service = Arc::new(service);
         *self.service.write().map_err(|error| error.to_string())? = Some(service.clone());
         Ok((service, info))
@@ -97,7 +111,7 @@ impl AppState {
     }
 }
 
-fn resolve_data_root(selected: &Path) -> Result<PathBuf, String> {
+fn resolve_data_root(selected: &Path) -> Result<PathBuf, OpenDataDirError> {
     let candidates = [
         selected.to_path_buf(),
         selected.join("w"),
@@ -112,15 +126,20 @@ fn resolve_data_root(selected: &Path) -> Result<PathBuf, String> {
 
     for candidate in candidates {
         if contains_bundle(&candidate) {
-            return std::fs::canonicalize(&candidate)
-                .map_err(|error| format!("資料目錄 {} 無法開啟: {error}", candidate.display()));
+            return std::fs::canonicalize(&candidate).map_err(|error| {
+                format!("資料目錄 {} 無法開啟: {error}", candidate.display()).into()
+            });
         }
     }
 
-    Err(format!(
-        "選取的目錄找不到 *.bundle。請選擇遊戲安裝目錄、Maplestory_Classic_Data，或 StreamingAssets\\aa\\w：{}",
-        selected.display()
-    ))
+    Err(OpenDataDirError {
+        code: Some("noBundles"),
+        path: Some(selected.display().to_string()),
+        message: format!(
+            "選取的目錄找不到 *.bundle。請選擇遊戲安裝目錄、Maplestory_Classic_Data，或 StreamingAssets\\aa\\w：{}",
+            selected.display()
+        ),
+    })
 }
 
 fn contains_bundle(path: &Path) -> bool {
@@ -167,11 +186,14 @@ pub struct OpenResult {
 async fn open_data_dir(
     path: Option<String>,
     state: State<'_, AppState>,
-) -> Result<OpenResult, String> {
+) -> Result<OpenResult, OpenDataDirError> {
     let state = state.inner().clone();
-    blocking(move || {
-        let requested = path.as_deref().map(Path::new);
-        let (service, info) = state.current_or_open(requested)?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<OpenResult, OpenDataDirError> {
+        let root = path
+            .as_deref()
+            .map(|path| resolve_data_root(Path::new(path)))
+            .transpose()?;
+        let (service, info) = state.current_or_open(root.as_deref())?;
         let top = service
             .list_children("")
             .map_err(|error| error.to_string())?;
@@ -182,6 +204,7 @@ async fn open_data_dir(
         })
     })
     .await
+    .map_err(|error| OpenDataDirError::from(format!("背景工作失敗: {error}")))?
 }
 
 #[tauri::command]

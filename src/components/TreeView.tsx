@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ChildEntry } from "../api";
+import { useI18n } from "../i18n";
 
 interface TreeRow {
   key: string;
@@ -49,6 +50,7 @@ export function TreeView({
   onToggle,
   onSelect,
 }: TreeViewProps) {
+  const { t } = useI18n();
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(() => {
@@ -144,7 +146,7 @@ export function TreeView({
   };
 
   if (rows.length === 0) {
-    return <div className="tree-loading">正在建立資產樹…</div>;
+    return <div className="tree-loading">{t("browse.tree.building")}</div>;
   }
 
   return (
@@ -153,7 +155,7 @@ export function TreeView({
       className="tree-list"
       role="tree"
       tabIndex={0}
-      aria-label="遊戲資產"
+      aria-label={t("browse.tree.label")}
       onKeyDown={onTreeKeyDown}
     >
       <div
@@ -190,8 +192,10 @@ export function TreeView({
                 disabled={!row.expandable}
                 aria-label={
                   row.expandable
-                    ? `${isExpanded ? "收合" : "展開"} ${entry.name}`
-                    : `${entry.name} 沒有子節點`
+                    ? isExpanded
+                      ? t("browse.tree.collapse", { name: entry.name })
+                      : t("browse.tree.expand", { name: entry.name })
+                    : t("browse.tree.noChildren", { name: entry.name })
                 }
                 onClick={(event) => {
                   event.stopPropagation();

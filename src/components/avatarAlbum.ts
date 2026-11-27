@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import type { PartsState } from "./AvatarPage";
 
 export interface AvatarLook {
@@ -25,8 +26,8 @@ function openAlbum(): Promise<IDBDatabase> {
       request.result.createObjectStore(STORE_NAME, { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("無法開啟相簿"));
-    request.onblocked = () => reject(new Error("相簿正在其他分頁更新，請關閉其他分頁後再試"));
+    request.onerror = () => reject(request.error ?? new Error(t("avatar.albumDb.openFailed")));
+    request.onblocked = () => reject(new Error(t("avatar.albumDb.blocked")));
   });
 }
 
@@ -41,8 +42,8 @@ export async function listAvatarLooks(): Promise<AvatarLook[]> {
         looks = request.result as AvatarLook[];
       };
       transaction.oncomplete = () => resolve(looks.sort((a, b) => b.createdAt - a.createdAt));
-      transaction.onerror = () => reject(transaction.error ?? new Error("無法讀取相簿"));
-      transaction.onabort = () => reject(transaction.error ?? new Error("相簿讀取已中止"));
+      transaction.onerror = () => reject(transaction.error ?? new Error(t("avatar.albumDb.readFailed")));
+      transaction.onabort = () => reject(transaction.error ?? new Error(t("avatar.albumDb.readAborted")));
     });
   } finally {
     db.close();
@@ -56,8 +57,8 @@ export async function saveAvatarLook(look: AvatarLook): Promise<void> {
       const transaction = db.transaction(STORE_NAME, "readwrite");
       transaction.objectStore(STORE_NAME).put(look);
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error("無法儲存外觀"));
-      transaction.onabort = () => reject(transaction.error ?? new Error("外觀儲存已中止"));
+      transaction.onerror = () => reject(transaction.error ?? new Error(t("avatar.albumDb.saveFailed")));
+      transaction.onabort = () => reject(transaction.error ?? new Error(t("avatar.albumDb.saveAborted")));
     });
   } finally {
     db.close();
@@ -71,8 +72,8 @@ export async function deleteAvatarLook(id: string): Promise<void> {
       const transaction = db.transaction(STORE_NAME, "readwrite");
       transaction.objectStore(STORE_NAME).delete(id);
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error("無法刪除外觀"));
-      transaction.onabort = () => reject(transaction.error ?? new Error("外觀刪除已中止"));
+      transaction.onerror = () => reject(transaction.error ?? new Error(t("avatar.albumDb.deleteFailed")));
+      transaction.onabort = () => reject(transaction.error ?? new Error(t("avatar.albumDb.deleteAborted")));
     });
   } finally {
     db.close();

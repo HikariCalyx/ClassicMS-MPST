@@ -1,6 +1,8 @@
 // 把 File System Access 的目錄控制代碼存進 IndexedDB(可 structured clone),
 // 下次開啟時取回重新連線,不用重新選資料夾。僅 Chromium 系會有資料。
 
+import { t } from "../i18n";
+
 const DB_NAME = "msclassic-handles";
 const STORE_NAME = "handles";
 const HANDLE_KEY = "data-dir";
@@ -17,7 +19,7 @@ function openDb(): Promise<IDBDatabase> {
       request.result.createObjectStore(STORE_NAME);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB 開啟失敗"));
+    request.onerror = () => reject(request.error ?? new Error(t("data.error.indexedDbOpen")));
   });
 }
 
@@ -32,7 +34,7 @@ export async function saveStoredFolder(
       const tx = db.transaction(STORE_NAME, "readwrite");
       tx.objectStore(STORE_NAME).put({ handle, label } satisfies StoredFolder, HANDLE_KEY);
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB 寫入失敗"));
+      tx.onerror = () => reject(tx.error ?? new Error(t("data.error.indexedDbWrite")));
     });
   } catch {
     // 忽略:記不住資料夾只是少了自動重連,功能不受影響。
@@ -47,7 +49,7 @@ export async function loadStoredFolder(): Promise<StoredFolder | null> {
       const tx = db.transaction(STORE_NAME, "readonly");
       const request = tx.objectStore(STORE_NAME).get(HANDLE_KEY);
       request.onsuccess = () => resolve((request.result as StoredFolder | undefined) ?? null);
-      request.onerror = () => reject(request.error ?? new Error("IndexedDB 讀取失敗"));
+      request.onerror = () => reject(request.error ?? new Error(t("data.error.indexedDbRead")));
     });
   } catch {
     return null;

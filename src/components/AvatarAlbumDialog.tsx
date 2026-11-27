@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n";
 import type { AvatarLook } from "./avatarAlbum";
 
 interface AvatarAlbumDialogProps {
@@ -32,6 +33,7 @@ export function AvatarAlbumDialog({
   onDelete,
   onStartSave,
 }: AvatarAlbumDialogProps) {
+  const { t } = useI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(defaultName);
@@ -71,8 +73,12 @@ export function AvatarAlbumDialog({
       }}
     >
       <header className="changelog-dialog-header">
-        <h2 id="avatar-album-title">{mode === "save" ? "儲存目前外觀" : `我的相簿 · ${looks.length}`}</h2>
-        <button type="button" className="icon-button" aria-label="關閉相簿" disabled={busy} onClick={onClose}>
+        <h2 id="avatar-album-title">
+          {mode === "save"
+            ? t("avatar.album.saveTitle")
+            : t("avatar.album.galleryTitle", { count: looks.length })}
+        </h2>
+        <button type="button" className="icon-button" aria-label={t("avatar.album.close")} disabled={busy} onClick={onClose}>
           ✕
         </button>
       </header>
@@ -86,23 +92,23 @@ export function AvatarAlbumDialog({
           }}
         >
           <div className="avatar-album-save-preview">
-            {thumbnail ? <img src={thumbnail} alt="目前外觀預覽" /> : null}
+            {thumbnail ? <img src={thumbnail} alt={t("avatar.album.previewAlt")} /> : null}
           </div>
           <div className="avatar-album-save-fields">
-            <label htmlFor="avatar-album-name">外觀名稱</label>
+            <label htmlFor="avatar-album-name">{t("avatar.album.nameLabel")}</label>
             <input
               ref={nameRef}
               id="avatar-album-name"
               value={name}
               maxLength={40}
               onChange={(event) => setName(event.target.value)}
-              placeholder="例如：藍色套裝"
+              placeholder={t("avatar.album.namePlaceholder")}
             />
-            <p>會保存目前的裝備、膚色、顏色、動作與表情。</p>
+            <p>{t("avatar.album.saveHint")}</p>
             <div className="avatar-album-save-actions">
-              <button type="button" disabled={busy} onClick={onClose}>取消</button>
+              <button type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
               <button type="submit" className="is-primary" disabled={busy || !name.trim()}>
-                {busy ? "儲存中…" : "儲存外觀"}
+                {busy ? t("common.saving") : t("avatar.album.save")}
               </button>
             </div>
           </div>
@@ -110,17 +116,17 @@ export function AvatarAlbumDialog({
       ) : (
         <>
           <div className="avatar-album-toolbar">
-            <p>點選外觀即可套用到紙娃娃。</p>
-            <button type="button" disabled={busy || loading} onClick={onStartSave}>＋ 儲存目前外觀</button>
+            <p>{t("avatar.album.applyHint")}</p>
+            <button type="button" disabled={busy || loading} onClick={onStartSave}>{t("avatar.album.saveCurrent")}</button>
           </div>
           <div className="avatar-album-body">
             {loading ? (
-              <div className="avatar-album-empty" role="status">正在讀取相簿…</div>
+              <div className="avatar-album-empty" role="status">{t("avatar.album.loading")}</div>
             ) : looks.length === 0 ? (
               <div className="avatar-album-empty">
                 <span aria-hidden="true">▧</span>
-                <strong>相簿還沒有外觀</strong>
-                <p>搭配好紙娃娃後，儲存一套外觀就能隨時回來選用。</p>
+                <strong>{t("avatar.album.emptyTitle")}</strong>
+                <p>{t("avatar.album.emptyHint")}</p>
               </div>
             ) : (
               <div className="avatar-album-grid">
@@ -129,7 +135,7 @@ export function AvatarAlbumDialog({
                     <button type="button" className="avatar-album-card-select" disabled={busy} onClick={() => onApply(look)}>
                       <span className="avatar-album-card-image"><img src={look.thumbnail} alt="" /></span>
                       <span className="avatar-album-card-name">{look.name}</span>
-                      <span className="avatar-album-card-hint">點選套用</span>
+                      <span className="avatar-album-card-hint">{t("avatar.album.clickToApply")}</span>
                     </button>
                     {editingId === look.id ? (
                       <form
@@ -144,29 +150,29 @@ export function AvatarAlbumDialog({
                         }}
                       >
                         <input
-                          aria-label="外觀名稱"
+                          aria-label={t("avatar.album.nameLabel")}
                           value={editingName}
                           maxLength={40}
                           autoFocus
                           onChange={(event) => setEditingName(event.target.value)}
                         />
-                        <button type="submit" disabled={busy || !editingName.trim()}>確定</button>
-                        <button type="button" onClick={() => setEditingId(null)}>取消</button>
+                        <button type="submit" disabled={busy || !editingName.trim()}>{t("common.confirm")}</button>
+                        <button type="button" onClick={() => setEditingId(null)}>{t("common.cancel")}</button>
                       </form>
                     ) : deletingId === look.id ? (
                       <div className="avatar-album-card-confirm">
-                        <span>確定刪除？</span>
+                        <span>{t("avatar.album.confirmDelete")}</span>
                         <button type="button" disabled={busy} onClick={() => {
                           void onDelete(look).then((deleted) => {
                             if (deleted) setDeletingId(null);
                           });
-                        }}>刪除</button>
-                        <button type="button" disabled={busy} onClick={() => setDeletingId(null)}>取消</button>
+                        }}>{t("common.delete")}</button>
+                        <button type="button" disabled={busy} onClick={() => setDeletingId(null)}>{t("common.cancel")}</button>
                       </div>
                     ) : (
                       <div className="avatar-album-card-actions">
-                        <button type="button" disabled={busy} onClick={() => startRename(look)}>重新命名</button>
-                        <button type="button" disabled={busy} onClick={() => { setEditingId(null); setDeletingId(look.id); }}>刪除</button>
+                        <button type="button" disabled={busy} onClick={() => startRename(look)}>{t("common.rename")}</button>
+                        <button type="button" disabled={busy} onClick={() => { setEditingId(null); setDeletingId(look.id); }}>{t("common.delete")}</button>
                       </div>
                     )}
                   </div>
@@ -177,7 +183,7 @@ export function AvatarAlbumDialog({
         </>
       )}
       {error ? <p className="avatar-album-error" role="alert">{error}</p> : null}
-      <p className="avatar-album-note">相簿只存在此瀏覽器；清除網站資料會一併刪除，其他裝置不會同步。</p>
+      <p className="avatar-album-note">{t("avatar.album.storageNote")}</p>
     </dialog>
   );
 }

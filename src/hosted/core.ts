@@ -10,13 +10,16 @@
 //   sheets/<sheet>_<page>.webp  atlas 頁（rect 的 y 是 Unity bottom-up 座標，切圖要換算）
 
 import type { ChildEntry, ImagePreviewResult, Value } from "../api.hosted";
+import { t } from "../i18n";
 
 // ---------------------------------------------------------------------------
 // 資料集常數（vite define 注入，見 vite.config.hosted.ts / src/vite-env.d.ts）
 // ---------------------------------------------------------------------------
 
 export const DATA_ROOT = `${__HOSTED_DATA_BASE__}/${__HOSTED_DATA_VERSION__}`;
-export const DATA_LABEL = `雲端資料 ${__HOSTED_DATA_VERSION__}`;
+/** 雲端資料集的顯示名稱（狀態列與歡迎頁用，跟隨介面語言）。 */
+export const dataLabel = (version: string = __HOSTED_DATA_VERSION__) =>
+  t("data.cloudLabel", { version });
 const HOSTED_JSON_CACHE_REVISION = "20260805-1";
 
 export const CLASS_WZJS_IMG = 114;
@@ -91,7 +94,7 @@ export async function fetchChecked(
     cache: options.reload ? "reload" : "default",
   });
   if (!response.ok) {
-    throw new Error(`抓取失敗（HTTP ${response.status}）：${url}`);
+    throw new Error(t("data.error.fetchFailed", { status: response.status, url }));
   }
   return response;
 }
@@ -103,7 +106,7 @@ export function initCatalog(entries: Record<string, number>): CatalogState {
 }
 
 export function requireCatalog(): CatalogState {
-  if (!catalogState) throw new Error("資料集尚未載入");
+  if (!catalogState) throw new Error(t("data.error.notLoaded"));
   return catalogState;
 }
 
@@ -142,7 +145,7 @@ export function walkDir(root: DirEntry, path: string): DirEntry | null {
 /** 目錄層的 ChildEntry 清單（對齊 Rust list_index_children：BTreeMap 依路徑排序）。 */
 export function listDirChildren(state: CatalogState, path: string): ChildEntry[] {
   const dir = walkDir(state.root, path);
-  if (!dir) throw new Error(`找不到目錄：${path || "(根目錄)"}`);
+  if (!dir) throw new Error(t("data.error.dirNotFound", { path: path || t("data.error.rootDir") }));
   const prefix = path === "" ? "" : `${path}/`;
   return [...dir.children.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -321,7 +324,7 @@ export async function cutSprite(meta: TreeCanvas): Promise<string> {
   canvas.width = meta.w;
   canvas.height = meta.h;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("無法建立 2D canvas context");
+  if (!ctx) throw new Error(t("data.error.canvasContext"));
   ctx.drawImage(bitmap, meta.x, yTop, meta.w, meta.h, 0, 0, meta.w, meta.h);
   return canvasToBase64(canvas);
 }
@@ -336,7 +339,7 @@ export function sheetPagePng(sheet: string, page: number): Promise<string> {
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("無法建立 2D canvas context");
+      if (!ctx) throw new Error(t("data.error.canvasContext"));
       ctx.drawImage(bitmap, 0, 0);
       return canvasToBase64(canvas);
     });
@@ -360,7 +363,7 @@ export async function getImageUncached(path: string): Promise<ImagePreviewResult
   if (inner === "") {
     try {
       const base64 = await sheetPagePng(imgKey, 0);
-      return { base64, mode: "atlas", note: "img 根節點，顯示完整 Atlas 頁" };
+      return { base64, mode: "atlas", note: t("data.note.imgRootAtlas") };
     } catch {
       return null;
     }
@@ -382,7 +385,7 @@ export async function getImageUncached(path: string): Promise<ImagePreviewResult
   // canvas 節點但 pipeline 沒解出 rect（約 0.06%）：退回整張 atlas 頁。
   try {
     const base64 = await sheetPagePng(imgKey, 0);
-    return { base64, mode: "atlas", note: "此節點沒有切圖索引，顯示完整 Atlas 頁" };
+    return { base64, mode: "atlas", note: t("data.note.noFrameIndex") };
   } catch {
     return null;
   }

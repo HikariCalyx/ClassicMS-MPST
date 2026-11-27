@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EquipItem, SkinInfo } from "../api";
+import { useI18n } from "../i18n";
 import type { EquipSlot, PartsState } from "./AvatarPage";
 import { loadAvatarIcon, SLOT_TABS } from "./AvatarShop";
-import { COLOR_LABELS, FACE_COLOR_LABELS } from "./avatarColor";
+import { FACE_COLOR_NAMES, HAIR_COLOR_NAMES, type ColorName } from "./avatarColor";
 
 const HAIR_COLORS = [0, 1, 2, 3, 4, 5, 6, 7];
 
@@ -19,6 +20,7 @@ function AvatarEquipRow({
   onToggleVisible: (slot: EquipSlot) => void;
   onRemove: (slot: EquipSlot) => void;
 }) {
+  const { t } = useI18n();
   const [icon, setIcon] = useState<string | null>(null);
   const iconPath = item?.iconPath;
 
@@ -38,7 +40,7 @@ function AvatarEquipRow({
       className={`avatar-equipped-row${part.visible ? "" : " is-hidden"}`}
       role="button"
       tabIndex={0}
-      title={part.visible ? "點擊隱藏此部位" : "點擊顯示此部位"}
+      title={part.visible ? t("avatar.equip.clickToHide") : t("avatar.equip.clickToShow")}
       onClick={() => onToggleVisible(slot)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -55,8 +57,8 @@ function AvatarEquipRow({
       <button
         type="button"
         className="avatar-equipped-remove"
-        title="脫下"
-        aria-label={`脫下 ${item?.name ?? part.id}`}
+        title={t("avatar.equip.remove")}
+        aria-label={t("avatar.equip.removeItem", { name: item?.name ?? part.id })}
         onClick={(event) => {
           event.stopPropagation();
           onRemove(slot);
@@ -106,7 +108,7 @@ function ColorSelect({
   label,
   value,
   options,
-  labels,
+  names,
   onChange,
 }: {
   id: string;
@@ -114,9 +116,11 @@ function ColorSelect({
   value: number;
   /** 實際可選的顏色碼（依序顯示）。 */
   options: number[];
-  labels: readonly string[];
+  /** 顏色碼 → 顏色代碼（顯示名稱在 avatar.color.*）。 */
+  names: readonly ColorName[];
   onChange: (color: number) => void;
 }) {
+  const { t } = useI18n();
   const selectRef = useWheelSelect(options, value, onChange);
 
   // 選取的顏色不在可選清單時（例如換了沒有白色的臉型），顯示退回第一個選項。
@@ -131,11 +135,14 @@ function ColorSelect({
         value={displayValue}
         onChange={(event) => onChange(Number(event.target.value))}
       >
-        {options.map((color) => (
-          <option key={color} value={color}>
-            {labels[color] ?? color}
-          </option>
-        ))}
+        {options.map((color) => {
+          const name: ColorName | undefined = names[color];
+          return (
+            <option key={color} value={color}>
+              {name ? t(`avatar.color.${name}`) : color}
+            </option>
+          );
+        })}
       </select>
     </div>
   );
@@ -194,6 +201,7 @@ export function AvatarEquipPanel({
   onToggleVisible,
   onRemove,
 }: AvatarEquipPanelProps) {
+  const { t } = useI18n();
   const equipById = useMemo(() => new Map(equipment.map((item) => [item.id, item])), [equipment]);
   const skinIds = useMemo(() => skins.map((candidate) => candidate.bodyId), [skins]);
   const skinRef = useWheelSelect(skinIds, skin.bodyId, (bodyId) => {
@@ -203,12 +211,12 @@ export function AvatarEquipPanel({
   const emotionRef = useWheelSelect(emotions, emotion, onEmotionChange);
   const actionRef = useWheelSelect(actions, action, onActionChange);
   // 已穿部位（含 hair/face），依 SLOT_TABS 順序顯示。
-  const wornSlots = SLOT_TABS.map(({ slot }) => slot).filter((slot) => parts[slot]);
+  const wornSlots = SLOT_TABS.filter((slot) => parts[slot]);
 
   return (
     <div className="avatar-controls">
       <div className="avatar-control-row">
-        <label htmlFor="avatar-skin-select">膚色</label>
+        <label htmlFor="avatar-skin-select">{t("avatar.controls.skin")}</label>
         <select
           ref={skinRef}
           id="avatar-skin-select"
@@ -228,7 +236,7 @@ export function AvatarEquipPanel({
       </div>
 
       <div className="avatar-control-row">
-        <label htmlFor="avatar-emotion-select">表情</label>
+        <label htmlFor="avatar-emotion-select">{t("avatar.controls.emotion")}</label>
         <select
           ref={emotionRef}
           id="avatar-emotion-select"
@@ -244,7 +252,7 @@ export function AvatarEquipPanel({
       </div>
 
       <div className="avatar-control-row">
-        <label htmlFor="avatar-action-select">動作</label>
+        <label htmlFor="avatar-action-select">{t("avatar.controls.action")}</label>
         <div className="avatar-action-row">
           <select
             ref={actionRef}
@@ -261,8 +269,8 @@ export function AvatarEquipPanel({
           <button
             type="button"
             className="avatar-play-button"
-            title={playing ? "暫停" : "播放"}
-            aria-label={playing ? "暫停" : "播放"}
+            title={playing ? t("common.pause") : t("common.play")}
+            aria-label={playing ? t("common.pause") : t("common.play")}
             onClick={onTogglePlaying}
           >
             {playing ? "⏸" : "▶"}
@@ -275,18 +283,18 @@ export function AvatarEquipPanel({
         <div className="avatar-color-row">
           <ColorSelect
             id="avatar-face-color-select"
-            label="臉型顏色"
+            label={t("avatar.controls.faceColor")}
             value={faceColor}
             options={faceColors}
-            labels={FACE_COLOR_LABELS}
+            names={FACE_COLOR_NAMES}
             onChange={(color) => onColorChange("face", color)}
           />
           <ColorSelect
             id="avatar-hair-color-select"
-            label="髮型顏色"
+            label={t("avatar.controls.hairColor")}
             value={hairColor}
             options={HAIR_COLORS}
-            labels={COLOR_LABELS}
+            names={HAIR_COLOR_NAMES}
             onChange={(color) => onColorChange("hair", color)}
           />
         </div>
@@ -296,36 +304,30 @@ export function AvatarEquipPanel({
           髮型陰影（hairShade）：不勾時藏掉髮型的 hairShade 陰影層。 */}
       <div className="avatar-control-row">
         <div className="avatar-checkbox-row">
-          <label
-            className="avatar-hair-cover"
-            title="勾選時帽子蓋住髮型；不勾時髮型超出帽子（有戴帽子才生效）"
-          >
+          <label className="avatar-hair-cover" title={t("avatar.controls.hairCoverTitle")}>
             <input
               type="checkbox"
               checked={hairCover}
               onChange={(event) => onHairCoverChange(event.target.checked)}
             />
-            帽子遮髮
+            {t("avatar.controls.hairCover")}
           </label>
-          <label
-            className="avatar-hair-cover"
-            title="勾選時顯示髮型的 hairShade 陰影層；有些髮型這層是很重的整片陰影，可取消勾選"
-          >
+          <label className="avatar-hair-cover" title={t("avatar.controls.hairShadeTitle")}>
             <input
               type="checkbox"
               checked={hairShade}
               onChange={(event) => onHairShadeChange(event.target.checked)}
             />
-            髮型陰影
+            {t("avatar.controls.hairShade")}
           </label>
         </div>
       </div>
 
       <hr className="avatar-divider" />
 
-      <p className="avatar-equipped-title">目前裝備</p>
+      <p className="avatar-equipped-title">{t("avatar.equip.title")}</p>
       {wornSlots.length === 0 ? (
-        <p className="avatar-equipped-empty">尚未穿上任何裝備，從右邊挑一件吧。</p>
+        <p className="avatar-equipped-empty">{t("avatar.equip.empty")}</p>
       ) : (
         wornSlots.map((slot) => {
           const part = parts[slot]!;

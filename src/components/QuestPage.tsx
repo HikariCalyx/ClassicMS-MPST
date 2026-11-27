@@ -15,6 +15,7 @@ import {
   type QuestSummary,
 } from "../api";
 import { getDropSources } from "../dropSources";
+import { useI18n } from "../i18n";
 import { loadClassicFrame } from "./classicFrame";
 import { DropSourcesDialog, type DropSourceItem, type MobThumbCache } from "./DropSourcesDialog";
 import { DropItemTooltip, ItemTooltip } from "./ItemTooltip";
@@ -210,6 +211,7 @@ function DialogueView({
   onItemHover?: (itemId: number, event: React.MouseEvent, name: string | null) => void;
   onItemLeave?: () => void;
 }) {
+  const { t } = useI18n();
   const script = useMemo(() => [...stage.lines, ...stage.ask], [stage]);
   const hasChoice = stage.yes.length > 0 || stage.no.length > 0;
   const [step, setStep] = useState(script.length > 0 ? 1 : 0);
@@ -261,13 +263,13 @@ function DialogueView({
         {renderBubbles(script, step, "")}
         {choice !== null ? renderBubbles(responseLines, respStep, "r") : null}
         {script.length === 0 && !hasChoice ? (
-          <p className="quest-dialogue-empty">此階段沒有對話資料</p>
+          <p className="quest-dialogue-empty">{t("quest.dialogue.empty")}</p>
         ) : null}
       </div>
       <div className="quest-dialogue-controls">
         {playing ? (
           <button type="button" onClick={() => setStep((s) => Math.min(s + 1, script.length))}>
-            繼續 ▼
+            {t("quest.dialogue.continue")}
           </button>
         ) : null}
         {awaitingChoice ? (
@@ -281,7 +283,7 @@ function DialogueView({
                   setRespStep(1);
                 }}
               >
-                接受
+                {t("quest.dialogue.accept")}
               </button>
             ) : null}
             {stage.no.length > 0 ? (
@@ -293,7 +295,7 @@ function DialogueView({
                   setRespStep(1);
                 }}
               >
-                婉拒
+                {t("quest.dialogue.decline")}
               </button>
             ) : null}
           </>
@@ -303,7 +305,7 @@ function DialogueView({
             type="button"
             onClick={() => setRespStep((s) => Math.min(s + 1, responseLines.length))}
           >
-            繼續 ▼
+            {t("quest.dialogue.continue")}
           </button>
         ) : null}
       </div>
@@ -376,6 +378,7 @@ function QuestItemChip({
   onLeave: () => void;
   onClick?: (item: QuestItemRef) => void;
 }) {
+  const { t } = useI18n();
   const [icon, setIcon] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -391,7 +394,7 @@ function QuestItemChip({
       className={`quest-item-chip${onClick ? " is-clickable" : ""}`}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      title={onClick ? "查看掉落此道具的怪物" : undefined}
+      title={onClick ? t("quest.item.viewSources") : undefined}
       onClick={onClick ? () => onClick(item) : undefined}
       onKeyDown={
         onClick
@@ -435,6 +438,7 @@ export function QuestPage({
   /** 從掉落來源彈窗點怪物時，切到怪物圖鑑並選取該怪物。 */
   onOpenMob?: (mobId: number) => void;
 }) {
+  const { t } = useI18n();
   const [book, setBook] = useState<QuestSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -627,9 +631,9 @@ export function QuestPage({
 
   let content;
   if (loadError) {
-    content = <p className="quest-page-status">任務資料載入失敗：{loadError}</p>;
+    content = <p className="quest-page-status">{t("quest.page.loadFailed", { error: loadError })}</p>;
   } else if (!book) {
-    content = <p className="quest-page-status">正在載入任務資料…</p>;
+    content = <p className="quest-page-status">{t("quest.page.loading")}</p>;
   } else {
     content = (
       <>
@@ -638,8 +642,8 @@ export function QuestPage({
             <input
               type="search"
               value={query}
-              placeholder="搜尋任務、系列或 NPC…"
-              aria-label="搜尋任務"
+              placeholder={t("quest.search.placeholder")}
+              aria-label={t("quest.search.label")}
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
@@ -649,7 +653,9 @@ export function QuestPage({
                 <section key={group.parent} className="quest-book-card">
                   <h3>
                     <span className="quest-book-title">{group.parent}</span>
-                    <span className="quest-book-count">{group.quests.length} 章</span>
+                    <span className="quest-book-count">
+                      {t("quest.shelf.chapters", { count: group.quests.length })}
+                    </span>
                   </h3>
                   {group.quests.map((quest, index) => (
                     <button
@@ -659,7 +665,7 @@ export function QuestPage({
                       onClick={() => pickQuest(quest.id)}
                     >
                       <span className="quest-shelf-chapter">{index + 1}</span>
-                      <span className="quest-shelf-name">{quest.name ?? "（未命名）"}</span>
+                      <span className="quest-shelf-name">{quest.name ?? t("common.unnamed")}</span>
                       <span className="quest-shelf-level">{levelLabel(quest)}</span>
                     </button>
                   ))}
@@ -667,7 +673,7 @@ export function QuestPage({
               ) : (
                 <section key="__single__" className="quest-book-card is-single">
                   <h3>
-                    <span className="quest-book-title">單發任務</span>
+                    <span className="quest-book-title">{t("quest.shelf.standalone")}</span>
                     <span className="quest-book-count">{group.quests.length}</span>
                   </h3>
                   {group.quests.map((quest) => (
@@ -677,7 +683,7 @@ export function QuestPage({
                       className={`quest-shelf-item${quest.id === selectedId ? " is-active" : ""}`}
                       onClick={() => pickQuest(quest.id)}
                     >
-                      <span className="quest-shelf-name">{quest.name ?? "（未命名）"}</span>
+                      <span className="quest-shelf-name">{quest.name ?? t("common.unnamed")}</span>
                       <span className="quest-shelf-level">{levelLabel(quest)}</span>
                     </button>
                   ))}
@@ -685,13 +691,13 @@ export function QuestPage({
               ),
             )}
             {groups.length === 0 ? (
-              <p className="quest-list-empty">沒有符合「{query}」的任務</p>
+              <p className="quest-list-empty">{t("quest.shelf.noMatch", { query })}</p>
             ) : null}
           </div>
         </aside>
 
         <section className="quest-stage" aria-busy={detailLoading}>
-          <div className="quest-stage-tabs" role="tablist" aria-label="任務階段">
+          <div className="quest-stage-tabs" role="tablist" aria-label={t("quest.stage.label")}>
             <button
               type="button"
               role="tab"
@@ -699,7 +705,7 @@ export function QuestPage({
               className={stageTab === "start" ? "is-active" : ""}
               onClick={() => setStageTab("start")}
             >
-              接受任務
+              {t("quest.stage.start")}
             </button>
             {progressStage ? (
               <button
@@ -709,7 +715,7 @@ export function QuestPage({
                 className={stageTab === "progress" ? "is-active" : ""}
                 onClick={() => setStageTab("progress")}
               >
-                進行中對話
+                {t("quest.stage.progress")}
               </button>
             ) : null}
             <button
@@ -719,28 +725,28 @@ export function QuestPage({
               className={stageTab === "end" ? "is-active" : ""}
               onClick={() => setStageTab("end")}
             >
-              完成任務
+              {t("quest.stage.end")}
             </button>
           </div>
           {detailError ? (
-            <p className="quest-page-status">任務資料載入失敗：{detailError}</p>
+            <p className="quest-page-status">{t("quest.page.loadFailed", { error: detailError })}</p>
           ) : !detail ? (
             <p className="quest-page-status">
-              {detailLoading ? "正在載入任務資料…" : "從左邊選擇一個任務"}
+              {detailLoading ? t("quest.page.loading") : t("quest.page.selectPrompt")}
             </p>
           ) : (
             <>
               <div className="quest-npc">
                 <NpcPortrait npcId={stageNpcId} name={stageNpcName} />
                 <div className="quest-npc-plate">
-                  {stageNpcName ?? (stageNpcId != null ? String(stageNpcId) : "未知的 NPC")}
+                  {stageNpcName ?? (stageNpcId != null ? String(stageNpcId) : t("quest.npc.unknown"))}
                 </div>
               </div>
               <div className="quest-dialogue" key={`${detail.id}:${stageTab}`}>
                 {currentStage ? (
                   <DialogueView stage={currentStage} onItemHover={showTip} onItemLeave={hideTip} />
                 ) : (
-                  <p className="quest-dialogue-empty">此階段沒有對話資料</p>
+                  <p className="quest-dialogue-empty">{t("quest.dialogue.empty")}</p>
                 )}
               </div>
               {chapters.length > 1 && chapterIndex >= 0 ? (
@@ -748,18 +754,21 @@ export function QuestPage({
                   <button
                     type="button"
                     disabled={chapterIndex <= 0}
-                    aria-label="上一章"
+                    aria-label={t("quest.chapter.prev")}
                     onClick={() => pickQuest(chapters[chapterIndex - 1].id)}
                   >
                     ◀
                   </button>
                   <span>
-                    第 {chapterIndex + 1} 章 / 共 {chapters.length} 章
+                    {t("quest.chapter.position", {
+                      current: chapterIndex + 1,
+                      total: chapters.length,
+                    })}
                   </span>
                   <button
                     type="button"
                     disabled={chapterIndex >= chapters.length - 1}
-                    aria-label="下一章"
+                    aria-label={t("quest.chapter.next")}
                     onClick={() => pickQuest(chapters[chapterIndex + 1].id)}
                   >
                     ▶
@@ -775,22 +784,22 @@ export function QuestPage({
           style={frameUrl ? ({ borderImageSource: `url(${frameUrl})` } as CSSProperties) : undefined}
         >
           {detailError ? (
-            <p className="quest-page-status">任務資料載入失敗：{detailError}</p>
+            <p className="quest-page-status">{t("quest.page.loadFailed", { error: detailError })}</p>
           ) : !detail ? (
             <p className="quest-page-status">
-              {detailLoading ? "正在載入任務資料…" : "從左邊選擇一個任務"}
+              {detailLoading ? t("quest.page.loading") : t("quest.page.selectPrompt")}
             </p>
           ) : (
             <div className="quest-log-scroll">
               <header className="quest-log-header">
-                <h2>{detail.name ?? "（未命名）"}</h2>
+                <h2>{detail.name ?? t("common.unnamed")}</h2>
                 {detail.parent ? <p className="quest-log-parent">{detail.parent}</p> : null}
                 <div className="quest-log-chips">
                   {levelLabel(detail) ? (
                     <span className="quest-chip is-level">{levelLabel(detail)}</span>
                   ) : null}
                   {detail.interval != null && detail.interval > 0 ? (
-                    <span className="quest-chip">可重複</span>
+                    <span className="quest-chip">{t("quest.log.repeatable")}</span>
                   ) : null}
                   <span className="quest-chip">{detail.id}</span>
                 </div>
@@ -798,7 +807,7 @@ export function QuestPage({
 
               {Object.keys(detail.info).length > 0 ? (
                 <section className="quest-log-section">
-                  <h3>任務簡介</h3>
+                  <h3>{t("quest.log.summary")}</h3>
                   {Object.entries(detail.info).map(([key, text]) => (
                     <MapleText
                       key={key}
@@ -813,17 +822,17 @@ export function QuestPage({
               ) : null}
 
               <section className="quest-log-section">
-                <h3>需求</h3>
+                <h3>{t("quest.log.requirements")}</h3>
                 {detail.startRequirements.preQuests.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">前置任務</span>
+                    <span className="quest-log-label">{t("quest.log.preQuests")}</span>
                     <div className="quest-log-values">
                       {detail.startRequirements.preQuests.map((ref) => (
                         <button
                           key={ref.id}
                           type="button"
                           className="quest-ref-link"
-                          title={`任務 ${ref.id}`}
+                          title={t("quest.log.questId", { id: ref.id })}
                           onClick={() => pickQuest(ref.id)}
                         >
                           {ref.name ?? ref.id}
@@ -834,7 +843,7 @@ export function QuestPage({
                 ) : null}
                 {detail.startRequirements.items.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">開始需求</span>
+                    <span className="quest-log-label">{t("quest.log.startItems")}</span>
                     <div className="quest-item-grid">
                       {detail.startRequirements.items.map((item, index) => (
                         <QuestItemChip
@@ -850,7 +859,7 @@ export function QuestPage({
                 ) : null}
                 {detail.requirements.items.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">需求道具</span>
+                    <span className="quest-log-label">{t("quest.log.requiredItems")}</span>
                     <div className="quest-item-grid">
                       {detail.requirements.items.map((item, index) => (
                         <QuestItemChip
@@ -866,7 +875,7 @@ export function QuestPage({
                 ) : null}
                 {detail.requirements.mobs.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">討伐怪物</span>
+                    <span className="quest-log-label">{t("quest.log.mobs")}</span>
                     <div className="quest-log-values">
                       {detail.requirements.mobs.map((mob, index) => (
                         <span key={`${mob.id}-${index}`} className="quest-chip">
@@ -880,12 +889,12 @@ export function QuestPage({
                 detail.startRequirements.items.length === 0 &&
                 detail.requirements.items.length === 0 &&
                 detail.requirements.mobs.length === 0 ? (
-                  <p className="quest-log-empty">沒有特殊需求</p>
+                  <p className="quest-log-empty">{t("quest.log.noRequirements")}</p>
                 ) : null}
               </section>
 
               <section className="quest-log-section">
-                <h3>獎勵</h3>
+                <h3>{t("quest.log.rewards")}</h3>
                 <dl className="quest-rewards">
                   {detail.rewards.exp != null && detail.rewards.exp !== 0 ? (
                     <div className="quest-reward">
@@ -895,13 +904,13 @@ export function QuestPage({
                   ) : null}
                   {detail.rewards.mesos != null && detail.rewards.mesos !== 0 ? (
                     <div className="quest-reward">
-                      <dt>楓幣</dt>
+                      <dt>{t("quest.log.mesos")}</dt>
                       <dd>{detail.rewards.mesos.toLocaleString()}</dd>
                     </div>
                   ) : null}
                   {detail.rewards.popularity != null && detail.rewards.popularity !== 0 ? (
                     <div className="quest-reward">
-                      <dt>名聲</dt>
+                      <dt>{t("quest.log.fame")}</dt>
                       <dd>{detail.rewards.popularity.toLocaleString()}</dd>
                     </div>
                   ) : null}
@@ -920,7 +929,7 @@ export function QuestPage({
                 ) : null}
                 {rewardGroups.random.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">隨機獲得</span>
+                    <span className="quest-log-label">{t("quest.log.randomRewards")}</span>
                     <div className="quest-item-grid">
                       {rewardGroups.random.map((item, index) => (
                         <QuestItemChip
@@ -936,7 +945,7 @@ export function QuestPage({
                 ) : null}
                 {rewardGroups.choice.length > 0 ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">自選一項</span>
+                    <span className="quest-log-label">{t("quest.log.choiceRewards")}</span>
                     <div className="quest-item-grid">
                       {rewardGroups.choice.map((item, index) => (
                         <QuestItemChip
@@ -951,12 +960,12 @@ export function QuestPage({
                 ) : null}
                 {detail.rewards.nextQuest ? (
                   <div className="quest-log-row">
-                    <span className="quest-log-label">下個任務</span>
+                    <span className="quest-log-label">{t("quest.log.nextQuest")}</span>
                     <div className="quest-log-values">
                       <button
                         type="button"
                         className="quest-ref-link"
-                        title={`任務 ${detail.rewards.nextQuest.id}`}
+                        title={t("quest.log.questId", { id: detail.rewards.nextQuest.id })}
                         onClick={() => pickQuest(detail.rewards.nextQuest!.id)}
                       >
                         {detail.rewards.nextQuest.name ?? detail.rewards.nextQuest.id}
@@ -969,7 +978,7 @@ export function QuestPage({
                 detail.rewards.popularity == null &&
                 rewardGroups.total === 0 &&
                 !detail.rewards.nextQuest ? (
-                  <p className="quest-log-empty">沒有獎勵資料</p>
+                  <p className="quest-log-empty">{t("quest.log.noRewards")}</p>
                 ) : null}
               </section>
             </div>

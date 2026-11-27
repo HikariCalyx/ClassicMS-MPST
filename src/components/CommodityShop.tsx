@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCommodityItems, type CommodityItem } from "../api";
+import { useI18n, type TFunction } from "../i18n";
 import { loadClassicFrame } from "./classicFrame";
 import { TextAssetCard } from "./NodeDetail";
 
@@ -13,44 +14,87 @@ const CARD_ROW_PX = 72 + 7;
 const mainOf = (sn: number) => Math.floor(sn / 10_000_000);
 const subOf = (sn: number) => Math.floor(sn / 100_000) % 100;
 
+// 分類 tab 的標籤代碼；文字在渲染時依介面語言取 shop.main.<代碼> / shop.sub.<代碼>。
+type MainLabel =
+  | "popular"
+  | "special"
+  | "gachapon"
+  | "enhance"
+  | "equip"
+  | "beauty"
+  | "pet"
+  | "convenience"
+  | "other";
+type SubLabel =
+  | "other"
+  | "set"
+  | "weapon"
+  | "cap"
+  | "longcoat"
+  | "coat"
+  | "pants"
+  | "cape"
+  | "shoes"
+  | "glove"
+  | "ring"
+  | "eyeAccessory"
+  | "effect"
+  | "hair"
+  | "face"
+  | "expression"
+  | "hairColor"
+  | "pet"
+  | "petApparel"
+  | "petFood"
+  | "general"
+  | "messenger"
+  | "weather"
+  | "slotExpansion"
+  | "store";
+
 // 主分類標籤（依商品實際內容判斷；未列出的代碼顯示「分類 NN」）。
-const MAIN_LABELS: Record<number, string> = {
-  9: "人氣商品",
-  11: "特殊",
-  12: "轉蛋",
-  13: "強化",
-  14: "裝備",
-  15: "美容",
-  16: "寵物",
-  17: "便利",
-  18: "其他",
+const MAIN_LABELS: Partial<Record<number, MainLabel>> = {
+  9: "popular",
+  11: "special",
+  12: "gachapon",
+  13: "enhance",
+  14: "equip",
+  15: "beauty",
+  16: "pet",
+  17: "convenience",
+  18: "other",
 };
 
 // 子分類標籤（同樣依內容判斷；未列出的顯示「子分類 NN」）。
-const SUB_LABELS: Record<number, Record<number, string>> = {
+const SUB_LABELS: Partial<Record<number, Partial<Record<number, SubLabel>>>> = {
   14: {
-    0: "其他",
-    1: "套裝",
-    2: "武器",
-    3: "帽子",
-    4: "套服",
-    5: "上衣",
-    6: "褲裙",
-    7: "披風",
-    8: "鞋子",
-    9: "手套",
-    10: "戒指",
-    11: "眼飾",
-    12: "特效",
+    0: "other",
+    1: "set",
+    2: "weapon",
+    3: "cap",
+    4: "longcoat",
+    5: "coat",
+    6: "pants",
+    7: "cape",
+    8: "shoes",
+    9: "glove",
+    10: "ring",
+    11: "eyeAccessory",
+    12: "effect",
   },
-  15: { 0: "美髮", 1: "整形", 2: "表情", 3: "染髮" },
-  16: { 2: "寵物", 3: "寵物服飾", 4: "寵物食品", 5: "其他" },
-  17: { 0: "雜貨", 1: "通訊", 2: "天氣", 3: "欄位擴充", 4: "商店" },
+  15: { 0: "hair", 1: "face", 2: "expression", 3: "hairColor" },
+  16: { 2: "pet", 3: "petApparel", 4: "petFood", 5: "other" },
+  17: { 0: "general", 1: "messenger", 2: "weather", 3: "slotExpansion", 4: "store" },
 };
 
-const mainLabel = (main: number) => MAIN_LABELS[main] ?? `分類 ${main}`;
-const subLabel = (main: number, sub: number) =>
-  SUB_LABELS[main]?.[sub] ?? `子分類 ${sub}`;
+const mainLabel = (main: number, t: TFunction) => {
+  const label = MAIN_LABELS[main];
+  return label ? t(`shop.main.${label}`) : t("shop.main.fallback", { code: main });
+};
+const subLabel = (main: number, sub: number, t: TFunction) => {
+  const label = SUB_LABELS[main]?.[sub];
+  return label ? t(`shop.sub.${label}`) : t("shop.sub.fallback", { code: sub });
+};
 
 // 頁碼列：頁數多時只留首尾與現頁附近，其餘用省略號折起。
 function pageNumbers(current: number, total: number): (number | "…")[] {
@@ -71,6 +115,7 @@ function pageNumbers(current: number, total: number): (number | "…")[] {
 // Etc/TW/Commodity 的商城檢視：分類 tab + 道具卡片（icon / 名稱 / 價格與數量）+ 分頁。
 // 名稱與 icon 由後端 get_commodity_items 一次聚合回傳；右上角可切回原始 JSON。
 export function CommodityShop({ text }: { text: string }) {
+  const { t } = useI18n();
   const [showRaw, setShowRaw] = useState(false);
   const [items, setItems] = useState<CommodityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +209,7 @@ export function CommodityShop({ text }: { text: string }) {
       <div className="commodity-raw-stack">
         <div className="commodity-raw-bar">
           <button type="button" className="find-hint" onClick={() => setShowRaw(false)}>
-            ← 返回商城預覽
+            {t("shop.window.backToPreview")}
           </button>
         </div>
         <TextAssetCard text={text} />
@@ -194,14 +239,18 @@ export function CommodityShop({ text }: { text: string }) {
       }}
     >
       <div className="commodity-window-title">
-        <span>商城{items ? `（${items.length}）` : ""}</span>
+        <span>
+          {items
+            ? t("shop.window.titleWithCount", { count: items.length })
+            : t("shop.window.title")}
+        </span>
         <button type="button" className="commodity-title-btn" onClick={() => setShowRaw(true)}>
-          原始 JSON
+          {t("shop.window.rawJson")}
         </button>
       </div>
 
       {error ? <p className="error commodity-status">{error}</p> : null}
-      {!error && !items ? <p className="commodity-status">正在載入商城資料…</p> : null}
+      {!error && !items ? <p className="commodity-status">{t("shop.status.loading")}</p> : null}
 
       {items ? (
         <>
@@ -219,7 +268,7 @@ export function CommodityShop({ text }: { text: string }) {
                   setPage(0);
                 }}
               >
-                {mainLabel(m)}
+                {mainLabel(m, t)}
               </button>
             ))}
           </div>
@@ -238,18 +287,22 @@ export function CommodityShop({ text }: { text: string }) {
                     setPage(0);
                   }}
                 >
-                  {subLabel(activeMain, s)}
+                  {subLabel(activeMain, s, t)}
                 </button>
               ))}
             </div>
           ) : null}
 
           {pageItems.length === 0 ? (
-            <p className="commodity-status">此分類沒有商品</p>
+            <p className="commodity-status">{t("shop.status.empty")}</p>
           ) : (
             <div className="commodity-grid" ref={gridRef}>
               {pageItems.map((item) => (
-                <article className="commodity-item" key={item.sn} title={`道具代碼 ${item.itemId}`}>
+                <article
+                  className="commodity-item"
+                  key={item.sn}
+                  title={t("shop.item.idTitle", { id: item.itemId })}
+                >
                   <div className="commodity-item-icon">
                     {item.iconBase64 ? (
                       <img src={`data:image/png;base64,${item.iconBase64}`} alt="" />
@@ -262,7 +315,7 @@ export function CommodityShop({ text }: { text: string }) {
                       {item.name ?? `#${item.itemId}`}
                     </strong>
                     <span className="commodity-item-price">
-                      {item.price} 點 / {item.count} 個
+                      {t("shop.item.price", { price: item.price, count: item.count })}
                     </span>
                   </div>
                 </article>
@@ -271,7 +324,7 @@ export function CommodityShop({ text }: { text: string }) {
           )}
 
           {totalPages > 1 ? (
-            <nav className="commodity-pager" aria-label="商城分頁">
+            <nav className="commodity-pager" aria-label={t("shop.pager.label")}>
               <button
                 type="button"
                 disabled={currentPage === 0}

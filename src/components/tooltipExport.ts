@@ -3,7 +3,9 @@
 // 顏色取自目前主題的 design token（經 1×1 canvas 正規化成 rgb，回避 oklch 解析差異）。
 import type { ItemTooltip } from "../api";
 import { saveBinaryFile } from "../api";
-import { ALL_JOB_LABELS, REQ_LABELS, formatItemDescription } from "./ItemTooltip";
+import { t } from "../i18n";
+import { formatItemDescription } from "./ItemTooltip";
+import { tooltipText, tooltipTitle, type TooltipText } from "./tooltipText";
 
 const SCALE = 2;
 const REM = 16;
@@ -121,17 +123,21 @@ function reqTone(value: number, highlightLevel = false): ReqTone {
 }
 
 /** 計算卡片寬度：量出各區塊需要的最大寬，夾在 MIN_WIDTH～MAX_WIDTH。 */
-function computeWidth(ctx: CanvasRenderingContext2D, details: ItemTooltip): number {
+function computeWidth(
+  ctx: CanvasRenderingContext2D,
+  details: ItemTooltip,
+  text: TooltipText,
+): number {
   let needed = MIN_WIDTH;
   const consider = (w: number) => {
     needed = Math.max(needed, w);
   };
 
   ctx.font = fontOf(800, 0.92);
-  consider(ctx.measureText(details.title).width + PAD_X * 2);
-  if (details.attributeLines.length > 0) {
+  consider(ctx.measureText(text.title).width + PAD_X * 2);
+  if (text.attributes) {
     ctx.font = fontOf(400, 0.7);
-    consider(ctx.measureText(details.attributeLines.join(", ")).width + PAD_X * 2);
+    consider(ctx.measureText(text.attributes).width + PAD_X * 2);
   }
 
   const pairWidth = (label: string, value: string): number => {
@@ -140,33 +146,28 @@ function computeWidth(ctx: CanvasRenderingContext2D, details: ItemTooltip): numb
     ctx.font = fontOf(700, 0.78, true);
     return lw + 6 + ctx.measureText(value).width;
   };
-  const lev = pairWidth(REQ_LABELS.level, formatReq(details.requiredLevel));
+  const lev = pairWidth(text.req.level, formatReq(details.requiredLevel));
   const row2 =
-    pairWidth(REQ_LABELS.str, formatReq(details.requiredStr)) +
+    pairWidth(text.req.str, formatReq(details.requiredStr)) +
     6 +
-    pairWidth(REQ_LABELS.luk, formatReq(details.requiredLuk));
+    pairWidth(text.req.luk, formatReq(details.requiredLuk));
   const row3 =
-    pairWidth(REQ_LABELS.dex, formatReq(details.requiredDex)) +
+    pairWidth(text.req.dex, formatReq(details.requiredDex)) +
     6 +
-    pairWidth(REQ_LABELS.int, formatReq(details.requiredInt));
+    pairWidth(text.req.int, formatReq(details.requiredInt));
   consider(PAD_X + ICON_FRAME + 12 + Math.max(lev, row2, row3) + PAD_X);
 
-  const jobWidths = ALL_JOB_LABELS.map((job) => {
-    ctx.font = fontOf(details.requiredJobs.includes(job) ? 700 : 400, 0.72);
-    return ctx.measureText(job).width;
+  const jobWidths = text.jobs.map((job) => {
+    ctx.font = fontOf(job.enabled ? 700 : 400, 0.72);
+    return ctx.measureText(job.label).width;
   });
   consider(jobWidths.reduce((a, b) => a + b, 0) + 10 * (jobWidths.length - 1) + PAD_X * 2);
 
   ctx.font = fontOf(400, 0.78);
-  consider(ctx.measureText(details.categoryLine).width + PAD_X * 2);
-  for (const line of details.statLines) {
-    consider(ctx.measureText(`${line.label} : ${line.value}`).width + PAD_X * 2);
-  }
-  if (details.attackSpeedLabel) {
-    consider(ctx.measureText(`攻擊速度 : ${details.attackSpeedLabel}`).width + PAD_X * 2);
-  }
-  if (details.scrollCount !== null) {
-    consider(ctx.measureText(`可使用卷軸次數 : ${details.scrollCount}`).width + PAD_X * 2);
+  consider(ctx.measureText(text.categoryLine).width + PAD_X * 2);
+  const lines = [...text.stats, text.attackSpeed, text.scrollCount];
+  for (const line of lines) {
+    if (line) consider(ctx.measureText(`${line.label} : ${line.value}`).width + PAD_X * 2);
   }
   return Math.min(Math.max(Math.ceil(needed), MIN_WIDTH), MAX_WIDTH);
 }
@@ -179,6 +180,7 @@ function layout(
   ctx: CanvasRenderingContext2D,
   width: number,
   details: ItemTooltip,
+  text: TooltipText,
   icon: HTMLImageElement | null,
   palette: Palette,
   draw: boolean,
@@ -201,12 +203,12 @@ function layout(
   y += lineHeight(0.66) + 1;
   ctx.font = fontOf(800, 0.92);
   ctx.fillStyle = css(palette.textStrong);
-  paint(() => ctx.fillText(details.title, cx, y));
+  paint(() => ctx.fillText(text.title, cx, y));
   y += lineHeight(0.92) + 1;
-  if (details.attributeLines.length > 0) {
+  if (text.attributes) {
     ctx.font = fontOf(400, 0.7);
     ctx.fillStyle = css(palette.warning);
-    paint(() => ctx.fillText(details.attributeLines.join(", "), cx, y));
+    paint(() => ctx.fillText(text.attributes, cx, y));
     y += lineHeight(0.7) + 1;
   }
   y += 6;
@@ -243,14 +245,14 @@ function layout(
   });
 
   const reqRows: Array<Array<[string, string, ReqTone]>> = [
-    [[REQ_LABELS.level, formatReq(details.requiredLevel), reqTone(details.requiredLevel, true)]],
+    [[text.req.level, formatReq(details.requiredLevel), reqTone(details.requiredLevel, true)]],
     [
-      [REQ_LABELS.str, formatReq(details.requiredStr), reqTone(details.requiredStr)],
-      [REQ_LABELS.luk, formatReq(details.requiredLuk), reqTone(details.requiredLuk)],
+      [text.req.str, formatReq(details.requiredStr), reqTone(details.requiredStr)],
+      [text.req.luk, formatReq(details.requiredLuk), reqTone(details.requiredLuk)],
     ],
     [
-      [REQ_LABELS.dex, formatReq(details.requiredDex), reqTone(details.requiredDex)],
-      [REQ_LABELS.int, formatReq(details.requiredInt), reqTone(details.requiredInt)],
+      [text.req.dex, formatReq(details.requiredDex), reqTone(details.requiredDex)],
+      [text.req.int, formatReq(details.requiredInt), reqTone(details.requiredInt)],
     ],
   ];
   ctx.textBaseline = "alphabetic";
@@ -273,19 +275,18 @@ function layout(
 
   // ── 職業列（置中）──
   y += 5;
-  const jobWidths = ALL_JOB_LABELS.map((job) => {
-    ctx.font = fontOf(details.requiredJobs.includes(job) ? 700 : 400, 0.72);
-    return ctx.measureText(job).width;
+  const jobWidths = text.jobs.map((job) => {
+    ctx.font = fontOf(job.enabled ? 700 : 400, 0.72);
+    return ctx.measureText(job.label).width;
   });
   const jobsTotal = jobWidths.reduce((a, b) => a + b, 0) + 10 * (jobWidths.length - 1);
   let jobX = (width - jobsTotal) / 2;
   const jobBaseline = y + lineHeight(0.72) * 0.72;
-  ALL_JOB_LABELS.forEach((job, i) => {
-    const enabled = details.requiredJobs.includes(job);
-    ctx.font = fontOf(enabled ? 700 : 400, 0.72);
-    ctx.fillStyle = css(enabled ? palette.textStrong : palette.subtle);
+  text.jobs.forEach((job, i) => {
+    ctx.font = fontOf(job.enabled ? 700 : 400, 0.72);
+    ctx.fillStyle = css(job.enabled ? palette.textStrong : palette.subtle);
     ctx.textAlign = "left";
-    paint(() => ctx.fillText(job, jobX, jobBaseline));
+    paint(() => ctx.fillText(job.label, jobX, jobBaseline));
     jobX += jobWidths[i] + 10;
   });
   y += lineHeight(0.72) + 7;
@@ -319,15 +320,15 @@ function layout(
     }
     y += kvAdvance;
   };
-  drawKV(details.categoryLine, "", palette.muted, palette.muted);
-  if (details.attackSpeedLabel) {
-    drawKV("攻擊速度 : ", details.attackSpeedLabel, palette.muted, palette.textStrong);
+  drawKV(text.categoryLine, "", palette.muted, palette.muted);
+  if (text.attackSpeed) {
+    drawKV(`${text.attackSpeed.label} : `, text.attackSpeed.value, palette.muted, palette.textStrong);
   }
-  for (const line of details.statLines) {
+  for (const line of text.stats) {
     drawKV(`${line.label} : `, line.value, palette.muted, palette.textStrong);
   }
-  if (details.scrollCount !== null) {
-    drawKV("可使用卷軸次數 : ", String(details.scrollCount), palette.warning, palette.warning);
+  if (text.scrollCount) {
+    drawKV(`${text.scrollCount.label} : `, text.scrollCount.value, palette.warning, palette.warning);
   }
   y += 6;
 
@@ -362,16 +363,17 @@ export async function exportTooltipPng(source: ItemTooltip): Promise<void> {
 
   const measureCanvas = document.createElement("canvas");
   const mctx = measureCanvas.getContext("2d");
-  if (!mctx) throw new Error("無法建立繪圖環境");
+  if (!mctx) throw new Error(t("tooltip.canvasFailed"));
 
-  const width = computeWidth(mctx, details);
-  const height = Math.ceil(layout(mctx, width, details, icon, palette, false));
+  const text = tooltipText(details, t);
+  const width = computeWidth(mctx, details, text);
+  const height = Math.ceil(layout(mctx, width, details, text, icon, palette, false));
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(width * SCALE);
   canvas.height = Math.round(height * SCALE);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("無法建立繪圖環境");
+  if (!ctx) throw new Error(t("tooltip.canvasFailed"));
   ctx.scale(SCALE, SCALE);
 
   const bg = ctx.createLinearGradient(0, 0, 0, height);
@@ -385,12 +387,12 @@ export async function exportTooltipPng(source: ItemTooltip): Promise<void> {
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  layout(ctx, width, details, icon, palette, true);
+  layout(ctx, width, details, text, icon, palette, true);
 
   const dataUrl = canvas.toDataURL("image/png");
   const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
   const safeTitle = details.title.replace(/[\\/:*?"<>|]/g, "_");
-  await saveBinaryFile(`item_${details.itemId}_${safeTitle}.png`, "PNG 圖片", "png", base64);
+  await saveBinaryFile(`item_${details.itemId}_${safeTitle}.png`, t("common.pngImage"), "png", base64);
 }
 
 /**
@@ -403,7 +405,7 @@ export async function exportDropItemTooltipPng(details: ItemTooltip): Promise<vo
 
   const measureCanvas = document.createElement("canvas");
   const mctx = measureCanvas.getContext("2d");
-  if (!mctx) throw new Error("無法建立繪圖環境");
+  if (!mctx) throw new Error(t("tooltip.canvasFailed"));
 
   // 資料裡的換行是字面 \n（對齊 monster.ts / skillJobs.ts）；卷軸另把屬性逐條換行。
   const description = details.description
@@ -413,7 +415,8 @@ export async function exportDropItemTooltipPng(details: ItemTooltip): Promise<vo
   // 文字欄寬：名稱與描述最長行取大，夾在下限～卡片上限。
   const textMax = DROP_MAX_WIDTH - PAD_X * 2 - ICON_FRAME - DROP_GAP;
   mctx.font = fontOf(800, 0.85);
-  let textW = mctx.measureText(details.title).width;
+  const title = tooltipTitle(details, t);
+  let textW = mctx.measureText(title).width;
   if (description) {
     mctx.font = fontOf(400, 0.72);
     for (const line of description.split("\n")) {
@@ -435,7 +438,7 @@ export async function exportDropItemTooltipPng(details: ItemTooltip): Promise<vo
   canvas.width = Math.round(width * SCALE);
   canvas.height = Math.round(height * SCALE);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("無法建立繪圖環境");
+  if (!ctx) throw new Error(t("tooltip.canvasFailed"));
   ctx.scale(SCALE, SCALE);
 
   // 卡片背景（同裝備版）。
@@ -477,7 +480,7 @@ export async function exportDropItemTooltipPng(details: ItemTooltip): Promise<vo
   ctx.textBaseline = "top";
   ctx.font = fontOf(800, 0.85);
   ctx.fillStyle = css(palette.textStrong);
-  ctx.fillText(details.title, textX, y);
+  ctx.fillText(title, textX, y);
   y += nameH;
   if (descLines.length > 0) {
     y += DROP_TEXT_GAP;
@@ -499,5 +502,5 @@ export async function exportDropItemTooltipPng(details: ItemTooltip): Promise<vo
   const dataUrl = canvas.toDataURL("image/png");
   const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
   const safeTitle = details.title.replace(/[\\/:*?"<>|]/g, "_");
-  await saveBinaryFile(`item_${details.itemId}_${safeTitle}.png`, "PNG 圖片", "png", base64);
+  await saveBinaryFile(`item_${details.itemId}_${safeTitle}.png`, t("common.pngImage"), "png", base64);
 }

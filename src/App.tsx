@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { Cloud, Folder, FolderSync, Moon, Sun } from "lucide-react";
+import { Cloud, Folder, FolderSync, Languages, Moon, Sun } from "lucide-react";
 import {
   getAudio,
   getDataSource,
@@ -21,6 +21,7 @@ import {
   reconnectDataDirectory,
   setDataSource,
   setRegion,
+  setWindowTitle,
   storedFolderLabel,
   supportsDataSourceSwitch,
   typeLabel,
@@ -43,6 +44,7 @@ import { SearchBar } from "./components/SearchBar";
 import { TreeView } from "./components/TreeView";
 import { useTheme } from "./useTheme";
 import { activateDatasetLocale } from "./locale";
+import { LANGUAGES, isLanguage, setLanguage, t, useI18n, type TFunction } from "./i18n";
 import { version as APP_VERSION } from "../package.json";
 
 const MIN_TREE_WIDTH = 240;
@@ -53,7 +55,7 @@ const AVATAR_BGM_VOLUME_KEY = "msclassic.avatarBgm.volume";
 // 資料來源切換（hosted 版限定）：true 時 header 顯示「雲端資料 / 本機資料夾」切換器。
 const CAN_SWITCH_DATA_SOURCE = supportsDataSourceSwitch();
 // 切到雲端時 loadDataDirectory 的 path 參數僅用於狀態列訊息（hosted openDataDir 會忽略）。
-const CLOUD_SOURCE_LABEL = "雲端資料";
+const cloudSourceLabel = () => t("app.source.cloud");
 
 function initialTreeWidth(): number {
   const saved = Number(window.localStorage.getItem("msclassic.treePaneWidth"));
@@ -96,16 +98,38 @@ function selectedTypeLabel(entry: ChildEntry | null): string {
 }
 
 function statusFor(result: OpenResult): string {
-  return (
-    `${result.data_dir} — ${result.info.entry_count.toLocaleString()} 筆資產 / ` +
-    `${result.info.bundle_count} bundles` +
-    (result.info.elapsed_ms > 0
-      ? `（索引 ${result.info.elapsed_ms}ms${result.info.from_cache ? "，快取命中" : "，重建"}）`
-      : "")
-  );
+  const params = {
+    dir: result.data_dir,
+    assets: result.info.entry_count.toLocaleString(),
+    bundles: result.info.bundle_count,
+    ms: result.info.elapsed_ms,
+  };
+  if (result.info.elapsed_ms <= 0) return t("app.status.opened", params);
+  return result.info.from_cache
+    ? t("app.status.openedFromCache", params)
+    : t("app.status.openedRebuilt", params);
+}
+
+/** web 版匯入進度（OPFS 複製 / 索引建立）的訊息文字。 */
+function progressMessage(progress: ImportProgress, translate: TFunction): string {
+  switch (progress.stage) {
+    case "loadingIndex":
+      return translate("data.progress.loadingIndex");
+    case "unchanged":
+      return translate("data.progress.unchanged");
+    case "copying":
+      return translate("data.progress.copying", {
+        index: progress.fileIndex ?? 0,
+        total: progress.fileCount ?? 0,
+        file: progress.file ?? "",
+      });
+    case "buildingIndex":
+      return translate("data.progress.buildingIndex");
+  }
 }
 
 export default function App() {
+  const { language, t } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const [childrenMap, setChildrenMap] = useState<Map<string, ChildEntry[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -118,7 +142,7 @@ export default function App() {
   const [, setDataDir] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
-  const [status, setStatus] = useState("請先選擇楓之谷經典版的遊戲資料夾");
+  const [status, setStatus] = useState(() => t("app.status.chooseFolder"));
   const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [treeWidth, setTreeWidth] = useState(initialTreeWidth);
@@ -206,13 +230,15 @@ export default function App() {
         }
         await bgmAudioRef.current.play();
       } catch (error) {
-        if (!cancelled) setStatus(`背景音樂播放失敗：${String(error)}`);
+        if (!cancelled) setStatus(t("app.bgm.playFailed", { error: String(error) }));
       }
     };
     void play();
     return () => {
       cancelled = true;
     };
+    // t 只用在錯誤訊息，切換語言不必重播背景音樂。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, bgmOn]);
 
   useEffect(() => {
@@ -233,7 +259,7 @@ export default function App() {
     childRequestsRef.current.clear();
     setLoadingData(true);
     setDataError(null);
-    setStatus(`正在開啟 ${path}…`);
+    setStatus(t("app.status.opening", { path }));
 
     try {
       const result = await openDataDir(path);
@@ -253,7 +279,7 @@ export default function App() {
       if (generation !== datasetGenerationRef.current) return;
       const message = String(error);
       setDataError(message);
-      setStatus(`開啟失敗：${message}`);
+      setStatus(t("app.status.openFailed", { error: message }));
     } finally {
       if (generation === datasetGenerationRef.current) setLoadingData(false);
     }
@@ -268,7 +294,7 @@ export default function App() {
     } catch (error) {
       const message = String(error);
       setDataError(message);
-      setStatus(`無法開啟資料夾選擇器：${message}`);
+      setStatus(t("app.status.pickerFailed", { error: message }));
     }
   }, [loadDataDirectory]);
 
@@ -285,7 +311,7 @@ export default function App() {
     } catch (error) {
       const message = String(error);
       setDataError(message);
-      setStatus(`重新連線失敗：${message}`);
+      setStatus(t("app.status.reconnectFailed", { error: message }));
     }
   }, [loadDataDirectory]);
 
@@ -294,7 +320,7 @@ export default function App() {
     if (dataSource === "cloud" || loadingData) return;
     setDataSource("cloud");
     setDataSourceState("cloud");
-    await loadDataDirectory(CLOUD_SOURCE_LABEL);
+    await loadDataDirectory(cloudSourceLabel());
   }, [dataSource, loadingData, loadDataDirectory]);
 
   // 來源切換器（hosted 版）：切到本機 = 有記住的資料夾則重連，否則跳選擇器；
@@ -315,7 +341,7 @@ export default function App() {
       setDataSource("cloud");
       const message = String(error);
       setDataError(message);
-      setStatus(`切換本機資料夾失敗：${message}`);
+      setStatus(t("app.status.switchLocalFailed", { error: message }));
     }
   }, [dataSource, loadingData, loadDataDirectory]);
 
@@ -334,7 +360,7 @@ export default function App() {
         setLocaleNonce((nonce) => nonce + 1);
       } catch (error) {
         if (generation !== datasetGenerationRef.current) return;
-        setStatus(`切換語系失敗：${String(error)}`);
+        setStatus(t("app.status.regionFailed", { error: String(error) }));
       } finally {
         if (generation === datasetGenerationRef.current) setLoadingData(false);
       }
@@ -375,7 +401,7 @@ export default function App() {
         return next;
       });
       void loadChildren(path).catch((error) => {
-        setStatus(`載入 ${path} 失敗：${error}`);
+        setStatus(t("app.status.loadFailed", { path, error: String(error) }));
       });
     },
     [loadChildren],
@@ -398,12 +424,12 @@ export default function App() {
           if (entry) {
             setSelected(entry);
           } else {
-            setStatus(`找不到導覽目標：${path}`);
+            setStatus(t("app.status.targetNotFound", { path }));
           }
         })
         .catch((error) => {
           if (generation === navigationGenerationRef.current) {
-            setStatus(`導航至 ${path} 失敗：${error}`);
+            setStatus(t("app.status.navigateFailed", { path, error: String(error) }));
           }
         });
     },
@@ -457,7 +483,7 @@ export default function App() {
         const hash = decodeURIComponent(window.location.hash.replace(/^#\/?/, ""));
         initialTargetRequestRef.current = hash ? Promise.resolve(hash) : initialPath();
       } catch {
-        setStatus("初始路徑格式無效");
+        setStatus(t("app.status.initialPathInvalid"));
         return;
       }
     }
@@ -466,7 +492,7 @@ export default function App() {
         if (active && path) void onPickSearchResult(path);
       })
       .catch((error) => {
-        if (active) setStatus(`讀取初始路徑失敗：${error}`);
+        if (active) setStatus(t("app.status.initialPathFailed", { error: String(error) }));
       });
     return () => {
       active = false;
@@ -481,6 +507,11 @@ export default function App() {
 
   // web 版才有匯入進度(OPFS 複製 / 索引建立);桌面版 onProgress 不會觸發。
   useEffect(() => onProgress(setImportProgress), []);
+
+  // 視窗標題跟隨介面語言（document.title 由 i18n 模組更新；桌面版另設原生視窗標題）。
+  useEffect(() => {
+    void setWindowTitle(t("app.title")).catch(() => undefined);
+  }, [t]);
 
   const resizeTree = useCallback((clientX: number) => {
     const maxWidth = Math.max(MIN_TREE_WIDTH, window.innerWidth * 0.58);
@@ -531,7 +562,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="view-tabs" role="tablist" aria-label="檢視切換">
+        <div className="view-tabs" role="tablist" aria-label={t("app.tabs.label")}>
           <button
             type="button"
             role="tab"
@@ -539,7 +570,7 @@ export default function App() {
             className={view === "tree" ? "is-active" : ""}
             onClick={() => setView("tree")}
           >
-            瀏覽
+            {t("app.tabs.tree")}
           </button>
           <button
             type="button"
@@ -547,13 +578,13 @@ export default function App() {
             aria-selected={view === "avatar"}
             className={view === "avatar" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "角色試穿" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.avatarTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("avatar");
               setAvatarActivated(true);
             }}
           >
-            紙娃娃
+            {t("app.tabs.avatar")}
           </button>
           <button
             type="button"
@@ -561,13 +592,13 @@ export default function App() {
             aria-selected={view === "pet"}
             className={view === "pet" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "寵物試穿" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.petTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("pet");
               setPetAvatarActivated(true);
             }}
           >
-            寵物
+            {t("app.tabs.pet")}
           </button>
           <button
             type="button"
@@ -575,13 +606,13 @@ export default function App() {
             aria-selected={view === "monster"}
             className={view === "monster" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "怪物圖鑑" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.monsterTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("monster");
               setMonsterActivated(true);
             }}
           >
-            怪物圖鑑
+            {t("app.tabs.monster")}
           </button>
           <button
             type="button"
@@ -589,13 +620,13 @@ export default function App() {
             aria-selected={view === "skill"}
             className={view === "skill" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "技能瀏覽器" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.skillTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("skill");
               setSkillActivated(true);
             }}
           >
-            技能
+            {t("app.tabs.skill")}
           </button>
           <button
             type="button"
@@ -603,13 +634,13 @@ export default function App() {
             aria-selected={view === "quest"}
             className={view === "quest" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "任務資料庫" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.questTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("quest");
               setQuestActivated(true);
             }}
           >
-            任務
+            {t("app.tabs.quest")}
           </button>
           <button
             type="button"
@@ -617,13 +648,13 @@ export default function App() {
             aria-selected={view === "sound"}
             className={view === "sound" ? "is-active" : ""}
             disabled={!openInfo}
-            title={openInfo ? "BGM 音樂播放器" : "請先選擇資料夾"}
+            title={openInfo ? t("app.tabs.soundTitle") : t("app.tabs.needFolder")}
             onClick={() => {
               setView("sound");
               setSoundActivated(true);
             }}
           >
-            音樂
+            {t("app.tabs.sound")}
           </button>
         </div>
         <div className="header-divider" aria-hidden="true" />
@@ -649,8 +680,8 @@ export default function App() {
               className="icon-button bgm-button"
               type="button"
               onClick={() => setBgmOn((on) => !on)}
-              title={bgmOn ? "暫停背景音樂" : "播放背景音樂"}
-              aria-label={bgmOn ? "暫停背景音樂" : "播放背景音樂"}
+              title={bgmOn ? t("app.bgm.pause") : t("app.bgm.play")}
+              aria-label={bgmOn ? t("app.bgm.pause") : t("app.bgm.play")}
             >
               {bgmOn ? "⏸" : "▶"}
             </button>
@@ -661,10 +692,10 @@ export default function App() {
               max={100}
               value={Math.round(bgmVolume * 100)}
               onChange={(event) => setBgmVolume(Number(event.target.value) / 100)}
-              title={`背景音樂音量：${Math.round(bgmVolume * 100)}%`}
-              aria-label="背景音樂音量"
+              title={t("app.bgm.volumeValue", { percent: Math.round(bgmVolume * 100) })}
+              aria-label={t("app.bgm.volume")}
             />
-            <label className="cash-switch" title="只顯示點數裝備">
+            <label className="cash-switch" title={t("app.cashOnlyTitle")}>
               <input
                 type="checkbox"
                 checked={cashOnly}
@@ -673,24 +704,24 @@ export default function App() {
               <span className="cash-switch-track" aria-hidden="true">
                 <span className="cash-switch-thumb" />
               </span>
-              點裝
+              {t("app.cashOnly")}
             </label>
           </>
         ) : null}
         {CAN_SWITCH_DATA_SOURCE ? (
           <>
-            <div className="source-switch" role="tablist" aria-label="資料來源">
+            <div className="source-switch" role="tablist" aria-label={t("app.source.label")}>
               <button
                 type="button"
                 role="tab"
                 aria-selected={dataSource === "cloud"}
                 className={dataSource === "cloud" ? "is-active" : ""}
                 disabled={loadingData}
-                title="Cloudflare 託管的預處理資料，免安裝遊戲"
+                title={t("app.source.cloudTitle")}
                 onClick={() => void switchToCloud()}
               >
                 <Cloud aria-hidden="true" size={15} strokeWidth={2.25} />
-                雲端資料
+                {t("app.source.cloud")}
               </button>
               <button
                 type="button"
@@ -698,11 +729,11 @@ export default function App() {
                 aria-selected={dataSource === "local"}
                 className={dataSource === "local" ? "is-active" : ""}
                 disabled={loadingData}
-                title="讀取自己電腦裡的遊戲資料夾"
+                title={t("app.source.localTitle")}
                 onClick={() => void switchToLocal()}
               >
                 <Folder aria-hidden="true" size={15} strokeWidth={2.25} />
-                本機資料夾
+                {t("app.source.local")}
               </button>
             </div>
             {dataSource === "local" ? (
@@ -717,7 +748,7 @@ export default function App() {
                 ) : (
                   <Folder aria-hidden="true" size={15} strokeWidth={2.25} />
                 )}
-                {loadingData ? "載入中…" : openInfo ? "更換資料夾" : "選擇資料夾"}
+                {loadingData ? t("common.loading") : openInfo ? t("app.folder.change") : t("app.folder.choose")}
               </button>
             ) : null}
           </>
@@ -733,17 +764,17 @@ export default function App() {
             ) : (
               <Folder aria-hidden="true" size={15} strokeWidth={2.25} />
             )}
-            {loadingData ? "載入中…" : openInfo ? "更換資料夾" : "選擇資料夾"}
+            {loadingData ? t("common.loading") : openInfo ? t("app.folder.change") : t("app.folder.choose")}
           </button>
         )}
         {openInfo && openInfo.locales.length > 1 ? (
-          <label className="region-select" title="資料語系">
-            <span className="region-select-label">語系</span>
+          <label className="region-select" title={t("app.region.title")}>
+            <span className="region-select-label">{t("app.region.label")}</span>
             <select
               value={openInfo.locale}
               disabled={loadingData}
               onChange={(event) => void changeRegion(event.target.value)}
-              aria-label="資料語系"
+              aria-label={t("app.region.title")}
             >
               {openInfo.locales.map((code) => (
                 <option key={code} value={code}>
@@ -753,12 +784,28 @@ export default function App() {
             </select>
           </label>
         ) : null}
+        <label className="region-select language-select" title={t("app.language.title")}>
+          <Languages aria-hidden="true" size={15} strokeWidth={2.25} />
+          <select
+            value={language}
+            onChange={(event) => {
+              if (isLanguage(event.target.value)) setLanguage(event.target.value);
+            }}
+            aria-label={t("app.language.title")}
+          >
+            {LANGUAGES.map((option) => (
+              <option key={option.code} value={option.code} lang={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="icon-button"
           type="button"
           onClick={toggleTheme}
-          title={theme === "dark" ? "切換為淺色" : "切換為深色"}
-          aria-label="切換主題"
+          title={theme === "dark" ? t("app.theme.toLight") : t("app.theme.toDark")}
+          aria-label={t("app.theme.toggle")}
         >
                    {theme === "dark" ? (
             <Sun aria-hidden="true" size={15} strokeWidth={2.25} />
@@ -770,7 +817,7 @@ export default function App() {
 
       {importProgress ? (
         <div className="import-progress" role="status">
-          <span className="import-progress-message">{importProgress.message}</span>
+          <span className="import-progress-message">{progressMessage(importProgress, t)}</span>
           <div
             className="import-progress-track"
             role="progressbar"
@@ -797,7 +844,7 @@ export default function App() {
         >
           {view === "tree" ? (
             <>
-              <aside className="app-left" aria-label="資產樹">
+              <aside className="app-left" aria-label={t("app.tree.label")}>
                 <TreeView
                   childrenOf={childrenOf}
                   expanded={expanded}
@@ -817,7 +864,7 @@ export default function App() {
                 className={`workspace-resizer${resizingTree ? " is-active" : ""}`}
                 role="separator"
                 tabIndex={0}
-                aria-label="調整資產樹寬度"
+                aria-label={t("app.tree.resize")}
                 aria-orientation="vertical"
                 aria-valuemin={MIN_TREE_WIDTH}
                 aria-valuemax={Math.round(window.innerWidth * 0.58)}
@@ -877,37 +924,31 @@ export default function App() {
           <section>
             {CAN_SWITCH_DATA_SOURCE && dataSource === "cloud" ? (
               <>
-                <p className="welcome-eyebrow">開始使用</p>
-                <h1>連線雲端資料</h1>
-                <p className="welcome-description">
-                  正在連線 Cloudflare 託管的遊戲資料。若連線失敗，請確認網路後重試，
-                  或用右上角的來源切換器改讀本機資料夾。
-                </p>
+                <p className="welcome-eyebrow">{t("app.welcome.eyebrow")}</p>
+                <h1>{t("app.welcome.cloudTitle")}</h1>
+                <p className="welcome-description">{t("app.welcome.cloudDescription")}</p>
                 <button
                   className="welcome-open-button"
                   type="button"
                   disabled={loadingData}
-                  onClick={() => void loadDataDirectory(CLOUD_SOURCE_LABEL)}
+                  onClick={() => void loadDataDirectory(cloudSourceLabel())}
                 >
-                  {loadingData ? "正在連線雲端資料…" : "重試連線雲端資料"}
+                  {loadingData ? t("app.welcome.cloudConnecting") : t("app.welcome.cloudRetry")}
                 </button>
                 {dataError ? <p className="data-source-error" role="alert">{dataError}</p> : null}
               </>
             ) : (
               <>
-                <p className="welcome-eyebrow">開始使用</p>
-                <h1>選擇遊戲資料夾</h1>
-                <p className="welcome-description">
-                  請選擇楓之谷經典版的安裝目錄、Maplestory_Classic_Data，
-                  或直接選擇包含 bundle 的 StreamingAssets\aa\w。
-                </p>
+                <p className="welcome-eyebrow">{t("app.welcome.eyebrow")}</p>
+                <h1>{t("app.welcome.localTitle")}</h1>
+                <p className="welcome-description">{t("app.welcome.localDescription")}</p>
                 <button
                   className="welcome-open-button"
                   type="button"
                   disabled={loadingData}
                   onClick={() => void chooseDataDirectory()}
                 >
-                  {loadingData ? "正在建立資產索引…" : "選擇資料夾"}
+                  {loadingData ? t("app.welcome.indexing") : t("app.folder.choose")}
                 </button>
                 {reconnectLabel ? (
                   <button
@@ -916,22 +957,16 @@ export default function App() {
                     disabled={loadingData}
                     onClick={() => void reconnectStoredFolder()}
                   >
-                    重新連線上次資料夾：{reconnectLabel}
+                    {t("app.welcome.reconnect", { label: reconnectLabel })}
                   </button>
                 ) : null}
                 {dataError ? <p className="data-source-error" role="alert">{dataError}</p> : null}
-                <p className="welcome-hint">程式只會讀取遊戲資料，不會修改原始 bundle。</p>
+                <p className="welcome-hint">{t("app.welcome.readOnly")}</p>
                 {__WEB_BUILD__ ? (
-                  <p className="welcome-hint">
-                    瀏覽器的資料夾對話框若顯示「上傳」字樣屬正常現象（瀏覽器固定文案），
-                    檔案僅在你的電腦本機讀取，不會上傳到任何伺服器。
-                  </p>
+                  <p className="welcome-hint">{t("app.welcome.uploadHint")}</p>
                 ) : null}
                 {__WEB_BUILD__ && !CAN_SWITCH_DATA_SOURCE ? (
-                  <p className="welcome-hint">
-                    Chrome／Edge 若提示「無法開啟此資料夾，因為其包含系統檔案」，直接取消該對話框，
-                    再按一次「選擇資料夾」即會改用相容選擇器，同樣的位置即可正常選取。
-                  </p>
+                  <p className="welcome-hint">{t("app.welcome.systemFolderHint")}</p>
                 ) : null}
               </>
             )}
@@ -964,33 +999,33 @@ export default function App() {
       >
         {view === "avatar" || view === "pet" ? (
           <>
-            <span className="footer-node-type">{avatarPick ? "類型：img" : ""}</span>
+            <span className="footer-node-type">{avatarPick ? t("common.typeLabel", { type: "img" }) : ""}</span>
             <span className="footer-node-path">{avatarPick ?? ""}</span>
           </>
         ) : view === "monster" ? (
           <>
-            <span className="footer-node-type">{mobPick ? "類型：img" : ""}</span>
+            <span className="footer-node-type">{mobPick ? t("common.typeLabel", { type: "img" }) : ""}</span>
             <span className="footer-node-path">{mobPick ?? ""}</span>
           </>
         ) : view === "skill" ? (
           <>
-            <span className="footer-node-type">{skillPick ? "類型：img" : ""}</span>
+            <span className="footer-node-type">{skillPick ? t("common.typeLabel", { type: "img" }) : ""}</span>
             <span className="footer-node-path">{skillPick ?? ""}</span>
           </>
         ) : view === "quest" ? (
           <>
-            <span className="footer-node-type">{questPick ? "類型：img" : ""}</span>
+            <span className="footer-node-type">{questPick ? t("common.typeLabel", { type: "img" }) : ""}</span>
             <span className="footer-node-path">{questPick ?? ""}</span>
           </>
         ) : view === "sound" ? (
           <>
-            <span className="footer-node-type">{soundPick ? "類型：AudioClip" : ""}</span>
+            <span className="footer-node-type">{soundPick ? t("common.typeLabel", { type: "AudioClip" }) : ""}</span>
             <span className="footer-node-path">{soundPick ?? ""}</span>
           </>
         ) : (
           <>
             <span className="footer-node-type">
-              {selected ? `類型：${selectedTypeLabel(selected)}` : ""}
+              {selected ? t("common.typeLabel", { type: selectedTypeLabel(selected) }) : ""}
             </span>
             <span className="footer-node-path">{selected?.path ?? ""}</span>
           </>

@@ -191,6 +191,14 @@ textarea:focus-visible,
   border-radius: var(--radius-sm);
 }
 
+/* 介面語言選單：沿用資料語系選單外框，以圖示取代文字標籤。 */
+.language-select svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
 .app-body {
   display: grid;
   min-width: 0;

@@ -8,10 +8,12 @@ import {
   type SkillDetail,
   type SkillJobGroup,
 } from "../api";
+import { useI18n } from "../i18n";
 import { loadClassicFrame } from "./classicFrame";
 import {
   formatPropValue,
   HIDDEN_PROPS,
+  jobLabel,
   jobMeta,
   jobSection,
   parseMapleText,
@@ -64,19 +66,11 @@ function SkillIcon({
 /** 等級快捷按鈕的候選值；超過最高等級的會被過濾。 */
 const LEVEL_SHORTCUTS = [1, 10, 20, 30];
 
-/** 中欄技能視窗的分類區塊（順序即顯示順序）。 */
-const CATEGORY_SECTIONS: { key: SkillCategory; label: string }[] = [
-  { key: "passive", label: "被動技能" },
-  { key: "support", label: "Buff・功能" },
-  { key: "active", label: "主動技能" },
-];
-
-/** 詳情面板的類別 chip 文字。 */
-const CATEGORY_LABELS: Record<SkillCategory, string> = {
-  passive: "被動",
-  support: "Buff・功能",
-  active: "主動",
-};
+/**
+ * 中欄技能視窗的分類區塊（順序即顯示順序）。區塊標題為 skill.category.<分類>，
+ * 詳情面板的類別 chip 文字為 skill.categoryChip.<分類>。
+ */
+const CATEGORY_SECTIONS: SkillCategory[] = ["passive", "support", "active"];
 
 /** 楓之谷字串逐行渲染（#c…# 片段用強調色）。 */
 function MapleText({ raw, className }: { raw: string; className?: string }) {
@@ -108,6 +102,7 @@ export function SkillBookPage({
   /** 選取技能時回報節點路徑（給 App footer 麵包屑）。 */
   onPickSkill?: (path: string) => void;
 }) {
+  const { language, t } = useI18n();
   const [book, setBook] = useState<SkillJobGroup[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -230,9 +225,9 @@ export function SkillBookPage({
   // 中欄的分類區塊：被動 / Buff・功能 / 主動，空區塊不顯示。
   const categorySections = useMemo(() => {
     if (!currentGroup) return [];
-    return CATEGORY_SECTIONS.map((section) => ({
-      ...section,
-      skills: currentGroup.skills.filter((skill) => skill.category === section.key),
+    return CATEGORY_SECTIONS.map((key) => ({
+      key,
+      skills: currentGroup.skills.filter((skill) => skill.category === key),
     })).filter((section) => section.skills.length > 0);
   }, [currentGroup]);
 
@@ -257,13 +252,17 @@ export function SkillBookPage({
     );
   }, [detail, level, levelProps]);
 
-  // 數值表列（排除內部用 key，依標籤排序讓表格穩定）。
+  // 數值表列（排除內部用 key，依介面語言的標籤排序讓表格穩定）。
   const statRows = useMemo(() => {
     return Object.entries(levelProps)
       .filter(([key]) => !HIDDEN_PROPS.has(key))
-      .map(([key, value]) => ({ key, label: propLabel(key), text: formatPropValue(key, value) }))
-      .sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
-  }, [levelProps]);
+      .map(([key, value]) => ({
+        key,
+        label: propLabel(key, t),
+        text: formatPropValue(key, value, t),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, language));
+  }, [levelProps, language, t]);
 
   // 技能視窗底部的狀態列：游標停留的技能優先，否則顯示選取的技能。
   const statusSkill = useMemo(() => {
@@ -275,15 +274,15 @@ export function SkillBookPage({
     );
   }, [currentGroup, hoveredSkill, selectedSkill]);
 
-  const selectedMeta = selectedJob ? jobMeta(selectedJob) : null;
+  const selectedJobLabel = selectedJob ? jobLabel(selectedJob, t) : null;
 
   let content;
   // 中欄分類區塊的進場序號計數器（渲染時跨區塊累加）。
   let stagger = 0;
   if (loadError) {
-    content = <p className="skill-page-status">技能資料載入失敗：{loadError}</p>;
+    content = <p className="skill-page-status">{t("skill.loadFailed", { error: loadError })}</p>;
   } else if (!book) {
-    content = <p className="skill-page-status">正在載入技能資料…</p>;
+    content = <p className="skill-page-status">{t("skill.loading")}</p>;
   } else {
     content = (
       <>
@@ -292,8 +291,8 @@ export function SkillBookPage({
             <input
               type="search"
               value={query}
-              placeholder="搜尋技能名稱或 ID…"
-              aria-label="搜尋技能"
+              placeholder={t("skill.search.placeholder")}
+              aria-label={t("skill.search.label")}
               onChange={(event) => setQuery(event.target.value)}
             />
             {searchResults ? (
@@ -304,7 +303,6 @@ export function SkillBookPage({
             {searchResults ? (
               <>
                 {searchResults.map((hit) => {
-                  const meta = jobMeta(hit.job);
                   const active = hit.job === selectedJob && hit.id === selectedSkill;
                   return (
                     <button
@@ -315,15 +313,12 @@ export function SkillBookPage({
                     >
                       <SkillIcon job={hit.job} id={hit.id} alt="" className="skill-search-icon" />
                       <span className="skill-search-name">{hit.name ?? hit.id}</span>
-                      <span className="skill-search-job">
-                        {meta.name}
-                        {meta.tier ? `・${meta.tier}` : ""}
-                      </span>
+                      <span className="skill-search-job">{jobLabel(hit.job, t)}</span>
                     </button>
                   );
                 })}
                 {searchResults.length === 0 ? (
-                  <p className="skill-list-empty">沒有符合「{query}」的技能</p>
+                  <p className="skill-list-empty">{t("skill.search.noResults", { query })}</p>
                 ) : null}
               </>
             ) : (
@@ -332,9 +327,9 @@ export function SkillBookPage({
                 if (groups.length === 0) return null;
                 return (
                   <section key={section} className="skill-job-group">
-                    <h3>{section}</h3>
+                    <h3>{t(`skill.section.${section}`)}</h3>
                     {groups.map((group) => {
-                      const meta = jobMeta(group.job);
+                      const meta = jobMeta(group.job, t);
                       const active = group.job === selectedJob;
                       return (
                         <button
@@ -370,21 +365,17 @@ export function SkillBookPage({
           }
         >
           <div className="skill-window-title">
-            <span>
-              {selectedMeta
-                ? `${selectedMeta.name}${selectedMeta.tier ? `・${selectedMeta.tier}` : ""}`
-                : "技能"}
-            </span>
+            <span>{selectedJobLabel ?? t("skill.window.title")}</span>
             <span className="skill-window-count">
               <button
                 type="button"
                 className="skill-zoom-reset"
-                title="Ctrl+滾輪縮放圖示，點擊恢復 100%"
+                title={t("skill.window.zoomHint")}
                 onClick={() => setZoom(1)}
               >
                 {Math.round(zoom * 100)}%
               </button>
-              {currentGroup ? `${currentGroup.skills.length} 個技能` : ""}
+              {currentGroup ? t("skill.window.count", { count: currentGroup.skills.length }) : ""}
             </span>
           </div>
           {currentGroup && currentGroup.skills.length > 0 ? (
@@ -393,13 +384,14 @@ export function SkillBookPage({
                 // 跨區塊連續的進場序號，讓 stagger 動畫一路往下接。
                 const start = stagger;
                 stagger += section.skills.length;
+                const label = t(`skill.category.${section.key}`);
                 return (
                   <section className="skill-cat" key={section.key}>
                     <h4>
-                      {section.label}
+                      {label}
                       <span>{section.skills.length}</span>
                     </h4>
-                    <div className="skill-grid" role="listbox" aria-label={section.label}>
+                    <div className="skill-grid" role="listbox" aria-label={label}>
                       {section.skills.map((skill, index) => (
                         <button
                           key={skill.id}
@@ -412,7 +404,10 @@ export function SkillBookPage({
                           }}
                           title={
                             skill.name
-                              ? `${skill.name}（最高 Lv.${skill.maxLevel}）`
+                              ? t("skill.window.cellTitle", {
+                                  name: skill.name,
+                                  level: skill.maxLevel,
+                                })
                               : skill.id
                           }
                           onClick={() => pickSkill(currentGroup.job, skill.id)}
@@ -435,26 +430,28 @@ export function SkillBookPage({
               })}
             </div>
           ) : (
-            <p className="skill-window-empty">此職業沒有技能資料</p>
+            <p className="skill-window-empty">{t("skill.window.empty")}</p>
           )}
           <div className="skill-window-status" aria-live="polite">
             {statusSkill ? (
               <>
                 <span className="skill-status-name">{statusSkill.name ?? statusSkill.id}</span>
-                <span className="skill-status-meta">最高 Lv.{statusSkill.maxLevel}</span>
+                <span className="skill-status-meta">
+                  {t("skill.maxLevel", { level: statusSkill.maxLevel })}
+                </span>
               </>
             ) : (
-              <span className="skill-status-meta">選擇一個技能</span>
+              <span className="skill-status-meta">{t("skill.window.selectPrompt")}</span>
             )}
           </div>
         </section>
 
         <section className="skill-detail">
           {detailError ? (
-            <p className="skill-page-status">技能資料載入失敗：{detailError}</p>
+            <p className="skill-page-status">{t("skill.loadFailed", { error: detailError })}</p>
           ) : !detail ? (
             <p className="skill-page-status">
-              {detailLoading ? "正在載入技能資料…" : "從中間選擇一個技能"}
+              {detailLoading ? t("skill.loading") : t("skill.detail.selectPrompt")}
             </p>
           ) : (
             <div className="skill-detail-scroll">
@@ -463,18 +460,19 @@ export function SkillBookPage({
                   <SkillIcon job={detail.job} id={detail.id} alt={detail.name ?? detail.id} />
                 </div>
                 <div className="skill-hero-text">
-                  <h2>{detail.name ?? "（未命名）"}</h2>
+                  <h2>{detail.name ?? t("common.unnamed")}</h2>
                   <p className="skill-hero-id">{detail.id}</p>
                   <div className="skill-hero-chips">
-                    <span className="skill-chip is-level">最高 Lv.{detail.maxLevel}</span>
+                    <span className="skill-chip is-level">
+                      {t("skill.maxLevel", { level: detail.maxLevel })}
+                    </span>
                     {selectedCategory ? (
-                      <span className="skill-chip">{CATEGORY_LABELS[selectedCategory]}</span>
-                    ) : null}
-                    {selectedMeta ? (
                       <span className="skill-chip">
-                        {selectedMeta.name}
-                        {selectedMeta.tier ? `・${selectedMeta.tier}` : ""}
+                        {t(`skill.categoryChip.${selectedCategory}`)}
                       </span>
+                    ) : null}
+                    {selectedJobLabel ? (
+                      <span className="skill-chip">{selectedJobLabel}</span>
                     ) : null}
                   </div>
                 </div>
@@ -483,7 +481,7 @@ export function SkillBookPage({
               {detail.maxLevel > 1 ? (
                 <div className="skill-level-control">
                   <div className="skill-level-readout">
-                    <span className="skill-level-label">等級</span>
+                    <span className="skill-level-label">{t("skill.detail.level")}</span>
                     <span className="skill-level-num" key={level}>
                       {level}
                     </span>
@@ -494,7 +492,7 @@ export function SkillBookPage({
                     min={1}
                     max={detail.maxLevel}
                     value={Math.min(level, detail.maxLevel)}
-                    aria-label="技能等級"
+                    aria-label={t("skill.detail.levelSlider")}
                     onChange={(event) => setLevel(Number(event.target.value))}
                   />
                   <div className="skill-level-quick">
@@ -527,14 +525,14 @@ export function SkillBookPage({
 
               {detail.desc ? (
                 <section className="skill-section">
-                  <h3>技能說明</h3>
+                  <h3>{t("skill.detail.description")}</h3>
                   <MapleText raw={detail.desc} className="skill-desc" />
                 </section>
               ) : null}
 
               {statRows.length > 0 ? (
                 <section className="skill-section">
-                  <h3>等級 {level} 數值</h3>
+                  <h3>{t("skill.detail.stats", { level })}</h3>
                   <dl className="skill-stats" key={`stats-${level}`}>
                     {statRows.map((row) => (
                       <div key={row.key} className="skill-stat">
@@ -548,14 +546,16 @@ export function SkillBookPage({
 
               {detail.actions.length > 0 ? (
                 <section className="skill-section">
-                  <h3>動作延遲</h3>
+                  <h3>{t("skill.detail.actionDelays")}</h3>
                   <div className="skill-delays">
                     {detail.actions.map((action) => (
                       <span key={action} className="skill-chip" title={action}>
-                        {action}
                         {detail.actionDelays[action] != null
-                          ? `・${detail.actionDelays[action]}ms`
-                          : ""}
+                          ? t("skill.detail.actionDelay", {
+                              action,
+                              delay: detail.actionDelays[action],
+                            })
+                          : action}
                       </span>
                     ))}
                   </div>

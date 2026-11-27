@@ -7,6 +7,7 @@ import {
   type PetEquipInfo,
   type PetInfo,
 } from "../api";
+import { useI18n } from "../i18n";
 import { AvatarPreview } from "./AvatarPreview";
 import { PetControlPanel } from "./PetControlPanel";
 import { PetShop } from "./PetShop";
@@ -37,6 +38,7 @@ export function PetAvatarPage({
   /** 點商店卡片時回報寵物/寵裝 img 路徑（給 App footer 麵包屑）。 */
   onPickItem?: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const [pets, setPets] = useState<PetInfo[] | null>(null);
   const [equips, setEquips] = useState<PetEquipInfo[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -133,11 +135,11 @@ export function PetAvatarPage({
 
   let content;
   if (loadError) {
-    content = <p className="pet-page-status">寵物資料載入失敗：{loadError}</p>;
+    content = <p className="pet-page-status">{t("pet.page.loadFailed", { error: loadError })}</p>;
   } else if (!pets || !equips) {
-    content = <p className="pet-page-status">正在載入寵物資料…</p>;
+    content = <p className="pet-page-status">{t("pet.page.loading")}</p>;
   } else if (!pet) {
-    content = <p className="pet-page-status">找不到可用的寵物資料</p>;
+    content = <p className="pet-page-status">{t("pet.page.noPet")}</p>;
   } else {
     content = (
       <>

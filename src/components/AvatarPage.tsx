@@ -10,6 +10,7 @@ import {
   type PartInput,
   type SkinInfo,
 } from "../api";
+import { useI18n } from "../i18n";
 import { AvatarEquipPanel } from "./AvatarEquipPanel";
 import { AvatarAlbumDialog } from "./AvatarAlbumDialog";
 import { AvatarPreview, type AvatarPreviewHandle } from "./AvatarPreview";
@@ -45,6 +46,12 @@ export type PartsState = Partial<Record<EquipSlot, AvatarPartState>>;
 // 沒穿臉型時用的預設臉（決定表情清單與裸身表情貼圖）。
 const DEFAULT_FACE_ID = "00020000";
 
+// 相簿狀態列的訊息與錯誤：state 只存代碼與原始資料，渲染時才依介面語言組字。
+type AlbumNotice = { kind: "saved" | "applied" | "appliedPartial"; name: string };
+type AlbumError =
+  | { kind: "previewNotReady" }
+  | { kind: "readFailed" | "saveFailed" | "renameFailed" | "deleteFailed"; error: string };
+
 // 紙娃娃頁：所有試穿狀態集中在這裡，預覽/控制區/商店都是受控元件。
 export function AvatarPage({
   visible,
@@ -56,6 +63,7 @@ export function AvatarPage({
   /** 點商店卡片時回報裝備 img 路徑（給 App footer 麵包屑）。 */
   onPickItem?: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const [meta, setMeta] = useState<AvatarMeta | null>(null);
   const [equipment, setEquipment] = useState<EquipItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,8 +92,8 @@ export function AvatarPage({
   const [pendingThumbnail, setPendingThumbnail] = useState<string | null>(null);
   const [albumBusy, setAlbumBusy] = useState(false);
   const [albumLoading, setAlbumLoading] = useState(true);
-  const [albumError, setAlbumError] = useState<string | null>(null);
-  const [albumNotice, setAlbumNotice] = useState<string | null>(null);
+  const [albumError, setAlbumError] = useState<AlbumError | null>(null);
+  const [albumNotice, setAlbumNotice] = useState<AlbumNotice | null>(null);
   const albumRefreshRef = useRef(0);
 
   const refreshAlbum = useCallback(async () => {
@@ -96,7 +104,7 @@ export function AvatarPage({
       const saved = await listAvatarLooks();
       if (generation === albumRefreshRef.current) setLooks(saved);
     } catch (error) {
-      if (generation === albumRefreshRef.current) setAlbumError(`無法讀取相簿：${String(error)}`);
+      if (generation === albumRefreshRef.current) setAlbumError({ kind: "readFailed", error: String(error) });
     } finally {
       if (generation === albumRefreshRef.current) setAlbumLoading(false);
     }
@@ -254,7 +262,7 @@ export function AvatarPage({
     setAlbumNotice(null);
     const thumbnail = previewRef.current?.captureThumbnail() ?? null;
     if (!thumbnail) {
-      setAlbumError("角色預覽尚未完成，請等貼圖載入後再儲存。");
+      setAlbumError({ kind: "previewNotReady" });
       return;
     }
     setPendingThumbnail(thumbnail);
@@ -290,9 +298,9 @@ export function AvatarPage({
       setLooks((previous) => [look, ...previous]);
       setPendingThumbnail(null);
       setAlbumMode("gallery");
-      setAlbumNotice(`已儲存「${name}」`);
+      setAlbumNotice({ kind: "saved", name });
     } catch (error) {
-      setAlbumError(`無法儲存外觀：${String(error)}`);
+      setAlbumError({ kind: "saveFailed", error: String(error) });
     } finally {
       setAlbumBusy(false);
     }
@@ -319,9 +327,10 @@ export function AvatarPage({
     setHairShade(look.hairShade);
     if (nextFaceId === faceId) setEmotion(emotions.includes(look.emotion) ? look.emotion : "default");
     setAlbumMode(null);
-    setAlbumNotice(missing > 0 || !nextSkin
-      ? `已套用「${look.name}」；目前資料中有部分外觀內容無法使用。`
-      : `已套用「${look.name}」`);
+    setAlbumNotice({
+      kind: missing > 0 || !nextSkin ? "appliedPartial" : "applied",
+      name: look.name,
+    });
   };
 
   const renameLook = async (look: AvatarLook, name: string) => {
@@ -332,7 +341,7 @@ export function AvatarPage({
       setLooks((previous) => previous.map((item) => item.id === look.id ? { ...item, name } : item));
       return true;
     } catch (error) {
-      setAlbumError(`無法重新命名：${String(error)}`);
+      setAlbumError({ kind: "renameFailed", error: String(error) });
       return false;
     } finally {
       setAlbumBusy(false);
@@ -347,20 +356,29 @@ export function AvatarPage({
       setLooks((previous) => previous.filter((item) => item.id !== look.id));
       return true;
     } catch (error) {
-      setAlbumError(`無法刪除外觀：${String(error)}`);
+      setAlbumError({ kind: "deleteFailed", error: String(error) });
       return false;
     } finally {
       setAlbumBusy(false);
     }
   };
 
+  const albumErrorText = albumError
+    ? albumError.kind === "previewNotReady"
+      ? t("avatar.album.previewNotReady")
+      : t(`avatar.album.${albumError.kind}`, { error: albumError.error })
+    : null;
+  const albumNoticeText = albumNotice
+    ? t(`avatar.album.${albumNotice.kind}`, { name: albumNotice.name })
+    : null;
+
   let content;
   if (loadError) {
-    content = <p className="avatar-page-status">紙娃娃資料載入失敗：{loadError}</p>;
+    content = <p className="avatar-page-status">{t("avatar.page.loadFailed", { error: loadError })}</p>;
   } else if (!meta || !equipment) {
-    content = <p className="avatar-page-status">正在載入紙娃娃資料…</p>;
+    content = <p className="avatar-page-status">{t("avatar.page.loading")}</p>;
   } else if (!skin) {
-    content = <p className="avatar-page-status">找不到可用的膚色資料</p>;
+    content = <p className="avatar-page-status">{t("avatar.page.noSkin")}</p>;
   } else {
     content = (
       <>
@@ -377,14 +395,14 @@ export function AvatarPage({
             />
           </div>
           <div className="avatar-album-entry">
-            <button type="button" disabled={albumLoading} onClick={startSave}>儲存外觀</button>
+            <button type="button" disabled={albumLoading} onClick={startSave}>{t("avatar.album.save")}</button>
             <button type="button" onClick={openGallery}>
-              我的相簿 <span>{looks.length}</span>
+              {t("avatar.album.myAlbum")} <span>{looks.length}</span>
             </button>
           </div>
-          {albumNotice || albumError ? (
-            <p className={`avatar-album-status${albumError ? " is-error" : ""}`} role="status">
-              {albumError ?? albumNotice}
+          {albumNoticeText || albumErrorText ? (
+            <p className={`avatar-album-status${albumErrorText ? " is-error" : ""}`} role="status">
+              {albumErrorText ?? albumNoticeText}
             </p>
           ) : null}
           <div className="avatar-left-controls">
@@ -439,10 +457,10 @@ export function AvatarPage({
           mode={albumMode}
           looks={looks}
           thumbnail={pendingThumbnail}
-          defaultName={`外觀 ${looks.length + 1}`}
+          defaultName={t("avatar.album.defaultName", { index: looks.length + 1 })}
           busy={albumBusy}
           loading={albumLoading}
-          error={albumError}
+          error={albumErrorText}
           onClose={() => { setAlbumMode(null); setAlbumError(null); }}
           onSave={(name) => void saveLook(name)}
           onApply={applyLook}

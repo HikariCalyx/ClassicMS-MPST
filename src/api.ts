@@ -1,8 +1,10 @@
 // 後端 command 的型別與包裝（對齊 src-tauri/src/gui.rs / catalog.rs 的 serde 輸出）。
 
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { t } from "./i18n";
 
 export type ChildEntry =
   | { kind: "Category"; name: string; path: string; img_count: number }
@@ -60,29 +62,42 @@ export interface AudioResult {
   base64: string;
 }
 
-export interface TooltipStatLine {
-  label: string;
-  value: string;
+/** 裝備能力值（`info` 的屬性名與原始數值；標籤由前端依介面語言決定）。 */
+export interface TooltipStat {
+  key: string;
+  value: number;
 }
 
-/** 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。 */
+/**
+ * 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。分類、職業、屬性等只回代碼，
+ * 顯示文字由 ItemTooltip.tsx 依介面語言決定。
+ */
 export interface ItemTooltip {
   itemId: string;
   imgPath: string;
+  /** 道具名稱（字串表缺名時為 itemId）。 */
   title: string;
   description: string | null;
-  categoryLine: string;
+  /** 性別限制：0 = 男、1 = 女；沒有限制為 null。 */
+  reqGender: number | null;
+  /** 裝備分類代碼（cap、coat、weapon、face…）。 */
+  category: string;
+  /** 武器種類代碼（oneHandedSword、bow…）；不是已知武器時為 null。 */
+  weaponType: string | null;
   iconBase64: string | null;
   requiredLevel: number;
   requiredStr: number;
   requiredDex: number;
   requiredInt: number;
   requiredLuk: number;
+  /** 可裝備的職業代碼（beginner、warrior、magician、bowman、thief、pirate）。 */
   requiredJobs: string[];
-  attributeLines: string[];
-  attackSpeedLabel: string | null;
+  /** 道具屬性代碼（only、cash、timeLimited、tradeBlock、accountSharable、onlyEquip）。 */
+  attributes: string[];
+  /** `info/attackSpeed` 原始值。 */
+  attackSpeed: number | null;
   scrollCount: number | null;
-  statLines: TooltipStatLine[];
+  stats: TooltipStat[];
 }
 
 /** 圖鑑清單中的掉落物參照（對齊 monster.rs 的 serde 輸出）。 */
@@ -349,7 +364,25 @@ export interface FileExportResult {
   nodes: number;
 }
 
-export const openDataDir = (path?: string) => invoke<OpenResult>("open_data_dir", { path });
+/** open_data_dir 的錯誤（對齊 gui.rs 的 OpenDataDirError）：已知情況給代碼，由前端組字。 */
+interface OpenDataDirError {
+  code: "noBundles" | null;
+  path: string | null;
+  message: string;
+}
+
+function isOpenDataDirError(error: unknown): error is OpenDataDirError {
+  return typeof error === "object" && error !== null && "message" in error && "code" in error;
+}
+
+export const openDataDir = (path?: string) =>
+  invoke<OpenResult>("open_data_dir", { path }).catch((error: unknown) => {
+    // 與其他 command 一樣以字串 reject，呼叫端照舊 String(error) 顯示。
+    if (!isOpenDataDirError(error)) throw error;
+    throw error.code === "noBundles"
+      ? t("data.error.noBundles", { path: error.path ?? "" })
+      : error.message;
+  });
 export const listChildren = (path: string) => invoke<ChildEntry[]>("list_children", { path });
 export const getNode = (path: string) => invoke<NodeDetail>("get_node", { path });
 export const getImage = (path: string) => invoke<ImagePreviewResult | null>("get_image", { path });
@@ -431,12 +464,21 @@ export const supportsDataSourceSwitch = (): boolean => false;
 /** 以系統預設瀏覽器開啟外部連結（桌面版走 opener plugin）。 */
 export const openExternal = (url: string) => openUrl(url);
 
-/** web 版的匯入進度（OPFS 複製 / 索引建立）;桌面版沒有,onProgress 為 no-op。 */
+/** 原生視窗標題（跟隨介面語言；web 版只有 document.title，為 no-op）。 */
+export const setWindowTitle = (title: string): Promise<void> => getCurrentWindow().setTitle(title);
+
+/**
+ * web 版的匯入進度（OPFS 複製 / 索引建立）;桌面版沒有,onProgress 為 no-op。
+ * 只帶階段與數字，訊息文字由 App 依介面語言組字。
+ */
 export interface ImportProgress {
   phase: "copy" | "catalog";
   percent: number;
+  stage: "loadingIndex" | "unchanged" | "copying" | "buildingIndex";
+  /** copying 階段：目前複製的檔名，以及第幾個 / 共幾個。 */
   file?: string;
-  message: string;
+  fileIndex?: number;
+  fileCount?: number;
 }
 
 /** 桌面版不會有匯入進度,訂閱直接回 no-op 取消函式。 */
@@ -448,7 +490,7 @@ export const pickDataDirectory = (): Promise<string | null> =>
   open({
     directory: true,
     multiple: false,
-    title: "選擇楓之谷經典版遊戲資料夾",
+    title: t("data.pickFolderTitle"),
   });
 
 export interface ExportDialogOptions {
@@ -482,7 +524,7 @@ export const saveBinaryFile = async (
   base64: string,
 ): Promise<boolean> => {
   const outputPath = await save({
-    title: "儲存圖片",
+    title: t("data.saveImageTitle"),
     defaultPath: defaultName,
     filters: [{ name: label, extensions: [extension] }],
   });
@@ -513,8 +555,8 @@ export function typeLabel(tag: number): string {
 
 export function formatValue(v: Value): string {
   switch (v.type) {
-    case "SubTree": return "(子樹)";
-    case "Canvas": return "(圖片)";
+    case "SubTree": return t("data.value.subtree");
+    case "Canvas": return t("data.value.canvas");
     case "U8": case "U16": case "Int": case "Long": return String(v.value);
     case "Double": return String(v.value);
     case "Float2": case "Vector": case "Int2": return `(${v.value[0]}, ${v.value[1]})`;

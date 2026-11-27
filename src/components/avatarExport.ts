@@ -5,6 +5,7 @@
 
 import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import type { AvatarFrame, AvatarFrames } from "../api";
+import { t } from "../i18n";
 
 /** 幀序列的累計時間表；delay 缺漏時以 120ms 保底，最短 30ms 避免瘋狂跳幀。 */
 export interface Sequence {
@@ -24,9 +25,9 @@ export function buildSequence(frames: AvatarFrame[] | undefined): Sequence | nul
 }
 
 export function frameIndexAt(sequence: Sequence, time: number): number {
-  const t = ((time % sequence.total) + sequence.total) % sequence.total;
+  const wrapped = ((time % sequence.total) + sequence.total) % sequence.total;
   for (let i = 0; i < sequence.cumulative.length; i += 1) {
-    if (t < sequence.cumulative[i]) return i;
+    if (wrapped < sequence.cumulative[i]) return i;
   }
   return sequence.cumulative.length - 1;
 }
@@ -151,7 +152,7 @@ interface ExportStage {
 /** 依 bounding box 建立輸出畫布：整數倍放大（最長邊 ≤512）、寬高取偶數（WebP VP8 需要）。 */
 function createExportStage(frames: AvatarFrames, images: Map<string, HTMLImageElement>): ExportStage {
   const box = computeBoundingBox(frames, images);
-  if (!box) throw new Error("沒有可匯出的畫面");
+  if (!box) throw new Error(t("avatar.export.noFrame"));
   const fit = EXPORT_MAX_SIDE / Math.max(box.width, box.height);
   const scale = fit >= 1 ? Math.max(1, Math.floor(fit)) : fit;
   const drawWidth = box.width * scale;
@@ -162,7 +163,7 @@ function createExportStage(frames: AvatarFrames, images: Map<string, HTMLImageEl
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("無法建立匯出畫布");
+  if (!ctx) throw new Error(t("avatar.export.canvasFailed"));
   return {
     canvas,
     ctx,
@@ -201,7 +202,7 @@ async function forEachExportFrame(
   onFrame: (stage: ExportStage, step: number) => void | Promise<void>,
 ): Promise<void> {
   const bodySequence = buildSequence(scene.frames.frames);
-  if (!bodySequence) throw new Error("沒有可匯出的動畫");
+  if (!bodySequence) throw new Error(t("avatar.export.noAnimation"));
   const faceSequence = buildSequence(scene.frames.faceFrames);
   const effectSequence = buildSequence(scene.frames.effectFrames);
   const stage = createExportStage(scene.frames, scene.images);
@@ -211,14 +212,14 @@ async function forEachExportFrame(
     effectSequence?.total ?? 0,
   ]);
   for (let i = 0; i < count; i += 1) {
-    const t = i * step;
+    const time = i * step;
     composeFrame(
       stage.ctx,
       scene.frames,
       scene.images,
-      frameIndexAt(bodySequence, t),
-      faceSequence ? frameIndexAt(faceSequence, t) : -1,
-      effectSequence ? frameIndexAt(effectSequence, t) : -1,
+      frameIndexAt(bodySequence, time),
+      faceSequence ? frameIndexAt(faceSequence, time) : -1,
+      effectSequence ? frameIndexAt(effectSequence, time) : -1,
       stage.originX,
       stage.originY,
       stage.scale,
@@ -250,7 +251,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("圖片編碼失敗"))),
+      (blob) => (blob ? resolve(blob) : reject(new Error(t("avatar.export.encodeFailed")))),
       type,
       quality,
     );
@@ -311,7 +312,7 @@ function parseWebPChunks(buffer: ArrayBuffer): RiffChunk[] {
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
   if (bytes.length < 12 || fourccOf(bytes, 0) !== "RIFF" || fourccOf(bytes, 8) !== "WEBP") {
-    throw new Error("WebP 編碼結果格式異常");
+    throw new Error(t("avatar.export.webpInvalid"));
   }
   const chunks: RiffChunk[] = [];
   let offset = 12;
@@ -400,7 +401,7 @@ export async function exportWebP(scene: AvatarScene): Promise<void> {
     const blob = await canvasToBlob(stage.canvas, "image/webp", 0.92);
     const chunks = parseWebPChunks(await blob.arrayBuffer());
     const image = chunks.find((chunk) => chunk.fourcc === "VP8 " || chunk.fourcc === "VP8L");
-    if (!image) throw new Error("WebP 編碼結果缺少影像 chunk");
+    if (!image) throw new Error(t("avatar.export.webpNoImage"));
     frames.push({ alph: chunks.find((chunk) => chunk.fourcc === "ALPH") ?? null, image });
   });
   downloadBlob(muxAnimatedWebP(frames, width, height, step), `avatar_${scene.action}_${timestamp()}.webp`);

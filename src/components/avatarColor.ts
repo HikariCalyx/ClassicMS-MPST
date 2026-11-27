@@ -5,20 +5,34 @@ import type { EquipSlot } from "./AvatarPage";
 // - 髮型：末碼是顏色（0003XXX0–7），其餘位是造型。名稱依序：黑/紅/橙/黃/綠/藍/紫/褐。
 // - 臉型：百位數是顏色（0002CXXSS，C = 顏色，即倒數第三碼），其餘位是造型。
 //   顏色 0–8，名稱依序：黑/青/紅/綠/黃/藍/紫/粉/白（8 白色非每個造型都有）。
-export const COLOR_LABELS = ["黑色", "紅色", "橙色", "黃色", "綠色", "藍色", "紫色", "褐色"] as const;
+// 這裡只存顏色代碼；顯示名稱在 i18n 的 avatar.color.*，渲染時依介面語言翻譯。
 
-/** 臉型專用顏色名稱（index = 百位數顏色碼 0–8）。 */
-export const FACE_COLOR_LABELS = [
-  "黑色",
-  "青色",
-  "紅色",
-  "綠色",
-  "黃色",
-  "藍色",
-  "紫色",
-  "粉色",
-  "白色",
+/** 髮型顏色代碼（index = 末碼顏色碼 0–7）。 */
+export const HAIR_COLOR_NAMES = [
+  "black",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple",
+  "brown",
 ] as const;
+
+/** 臉型專用顏色代碼（index = 百位數顏色碼 0–8）。 */
+export const FACE_COLOR_NAMES = [
+  "black",
+  "cyan",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "purple",
+  "pink",
+  "white",
+] as const;
+
+export type ColorName = (typeof HAIR_COLOR_NAMES)[number] | (typeof FACE_COLOR_NAMES)[number];
 
 /** 該 slot 的顏色位階（hair = 個位、face = 百位）；無顏色概念回 null。 */
 function colorUnitOf(slot: EquipSlot): 1 | 100 | null {

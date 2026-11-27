@@ -12,6 +12,7 @@
 // input.click() 會被靜默擋下)。走 2 才選成功的位置視為被封鎖,
 // 之後固定走 2(見 FSA_DISABLED_KEY)。
 
+import { t } from "../i18n";
 import { loadStoredFolder, saveStoredFolder } from "./handleStore";
 
 export interface PickedFolder {
@@ -35,9 +36,12 @@ const CANDIDATES = [
   "Maplestory_Classic_Data/StreamingAssets/aa/w",
 ];
 
-const NO_BUNDLE_MESSAGE =
-  "選取的目錄找不到 *.bundle。請選擇遊戲安裝目錄、Maplestory_Classic_Data," +
-  "或 StreamingAssets\\aa\\w";
+/** 選到的資料夾裡找不到 bundle(選錯層級);與使用者取消區分。 */
+class NoBundleError extends Error {
+  constructor(folderName: string) {
+    super(t("data.error.noBundles", { path: folderName }));
+  }
+}
 
 function isBundleName(name: string): boolean {
   return name.toLowerCase().endsWith(".bundle");
@@ -79,7 +83,7 @@ export async function pickFolder(
     } catch (error) {
       // 找不到 bundle 是選錯資料夾,直接報錯;其餘(含 AbortError)記旗標後返回,
       // 由使用者的下一次點擊走相容選擇器。
-      if (error instanceof Error && error.message.startsWith(NO_BUNDLE_MESSAGE)) throw error;
+      if (error instanceof NoBundleError) throw error;
       fsaRetryWithInput = true;
       return null;
     }
@@ -178,7 +182,7 @@ async function fromDirectoryHandle(root: FileSystemDirectoryHandle): Promise<Pic
       };
     }
   }
-  throw new Error(`${NO_BUNDLE_MESSAGE}:${root.name}`);
+  throw new NoBundleError(root.name);
 }
 
 /** 從 file.webkitRelativePath 判斷層級。 */
@@ -200,5 +204,5 @@ function fromFileList(files: File[]): PickedFolder | null {
       };
     }
   }
-  throw new Error(`${NO_BUNDLE_MESSAGE}:${rootName}`);
+  throw new NoBundleError(rootName);
 }

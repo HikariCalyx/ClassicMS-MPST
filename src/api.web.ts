@@ -3,6 +3,7 @@
 // vite.config.web.ts 用 alias 把所有 "./api" / "../api" import 換成本檔。
 
 import { zipSync } from "fflate";
+import { t } from "./i18n";
 import { clearProgress, rpc, subscribeProgress } from "./web/client";
 import {
   pickFolder,
@@ -68,29 +69,42 @@ export interface AudioResult {
   base64: string;
 }
 
-export interface TooltipStatLine {
-  label: string;
-  value: string;
+/** 裝備能力值（`info` 的屬性名與原始數值；標籤由前端依介面語言決定）。 */
+export interface TooltipStat {
+  key: string;
+  value: number;
 }
 
-/** 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。 */
+/**
+ * 裝備 tooltip（對齊 item_tooltip.rs 的 serde 輸出）。分類、職業、屬性等只回代碼，
+ * 顯示文字由 ItemTooltip.tsx 依介面語言決定。
+ */
 export interface ItemTooltip {
   itemId: string;
   imgPath: string;
+  /** 道具名稱（字串表缺名時為 itemId）。 */
   title: string;
   description: string | null;
-  categoryLine: string;
+  /** 性別限制：0 = 男、1 = 女；沒有限制為 null。 */
+  reqGender: number | null;
+  /** 裝備分類代碼（cap、coat、weapon、face…）。 */
+  category: string;
+  /** 武器種類代碼（oneHandedSword、bow…）；不是已知武器時為 null。 */
+  weaponType: string | null;
   iconBase64: string | null;
   requiredLevel: number;
   requiredStr: number;
   requiredDex: number;
   requiredInt: number;
   requiredLuk: number;
+  /** 可裝備的職業代碼（beginner、warrior、magician、bowman、thief、pirate）。 */
   requiredJobs: string[];
-  attributeLines: string[];
-  attackSpeedLabel: string | null;
+  /** 道具屬性代碼（only、cash、timeLimited、tradeBlock、accountSharable、onlyEquip）。 */
+  attributes: string[];
+  /** `info/attackSpeed` 原始值。 */
+  attackSpeed: number | null;
   scrollCount: number | null;
-  statLines: TooltipStatLine[];
+  stats: TooltipStat[];
 }
 
 export interface ExportStats {
@@ -107,13 +121,16 @@ export interface FileExportResult {
   nodes: number;
 }
 
+/** 匯入進度（OPFS 複製 / 索引建立）：只帶階段與數字，訊息文字由 App 依介面語言組字。 */
 export interface ImportProgress {
   phase: "copy" | "catalog";
   percent: number;
+  stage: "loadingIndex" | "unchanged" | "copying" | "buildingIndex";
+  /** copying 階段：目前複製的檔名，以及第幾個 / 共幾個。 */
   file?: string;
-  message: string;
+  fileIndex?: number;
+  fileCount?: number;
 }
-
 export interface ExportDialogOptions {
   title: string;
   defaultName: string;
@@ -404,7 +421,7 @@ export const openDataDir = async (path?: string): Promise<OpenResult> => {
   }
   if (!picked) {
     picked = await pickFolder();
-    if (!picked) throw new Error("已取消選擇資料夾");
+    if (!picked) throw new Error(t("data.error.pickCancelled"));
     pendingPick = picked;
   }
   try {
@@ -589,6 +606,9 @@ export const initialDataDir = async (): Promise<string | null> => {
   return null;
 };
 
+/** web 版只有 document.title（由 i18n 模組跟隨介面語言更新），沒有原生視窗標題。 */
+export const setWindowTitle = (_title: string): Promise<void> => Promise.resolve();
+
 /** web 版直接開新分頁。 */
 export const openExternal = (url: string): Promise<void> => {
   window.open(url, "_blank", "noopener,noreferrer");
@@ -662,8 +682,8 @@ export function typeLabel(tag: number): string {
 
 export function formatValue(v: Value): string {
   switch (v.type) {
-    case "SubTree": return "(子樹)";
-    case "Canvas": return "(圖片)";
+    case "SubTree": return t("data.value.subtree");
+    case "Canvas": return t("data.value.canvas");
     case "U8": case "U16": case "Int": case "Long": return String(v.value);
     case "Double": return String(v.value);
     case "Float2": case "Vector": case "Int2": return `(${v.value[0]}, ${v.value[1]})`;

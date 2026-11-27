@@ -50,6 +50,7 @@ async function retireLegacyHostedCaching(): Promise<void> {
 
 import * as hosted from "./hosted/backend";
 import * as web from "./api.web";
+import { t } from "./i18n";
 
 export type {
   AudioResult,
@@ -93,7 +94,7 @@ export type {
   SkillJobGroup,
   SkillSummary,
   SkinInfo,
-  TooltipStatLine,
+  TooltipStat,
   Value,
 } from "./hosted/backend";
 
@@ -299,6 +300,9 @@ export const initialView = (): Promise<string | null> => {
 export const onProgress = (listener: (progress: ImportProgress | null) => void): (() => void) =>
   backend().onProgress(listener);
 
+/** 只有 document.title（由 i18n 模組跟隨介面語言更新），沒有原生視窗標題。 */
+export const setWindowTitle = (_title: string): Promise<void> => Promise.resolve();
+
 /** 直接開新分頁。 */
 export const openExternal = (url: string): Promise<void> => {
   window.open(url, "_blank", "noopener,noreferrer");
@@ -327,8 +331,8 @@ export function typeLabel(tag: number): string {
 
 export function formatValue(v: Value): string {
   switch (v.type) {
-    case "SubTree": return "(子樹)";
-    case "Canvas": return "(圖片)";
+    case "SubTree": return t("data.value.subtree");
+    case "Canvas": return t("data.value.canvas");
     case "U8": case "U16": case "Int": case "Long": return String(v.value);
     case "Double": return String(v.value);
     case "Float2": case "Vector": case "Int2": return `(${v.value[0]}, ${v.value[1]})`;

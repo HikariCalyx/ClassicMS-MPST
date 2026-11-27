@@ -1,6 +1,7 @@
 import { createDatasetCache } from "../locale";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getImage, type PetEquipInfo, type PetInfo } from "../api";
+import { useI18n } from "../i18n";
 
 // 卡片固定高 64px、grid 間距 7px，供列數估算（對齊 .avatar-shop-card / .avatar-shop-grid）。
 const CARD_ROW_PX = 64 + 7;
@@ -77,6 +78,7 @@ function PetShopCard({
   worn: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const [icon, setIcon] = useState<string | null>(null);
 
   // icon 按頁 lazy：卡片只在當前頁渲染，掛載時才抓圖。
@@ -94,7 +96,7 @@ function PetShopCard({
     <button
       type="button"
       className={`avatar-shop-card${worn ? " is-worn" : ""}`}
-      title={`${item.name}（${item.id}）`}
+      title={t("pet.shop.cardTitle", { name: item.name, id: item.id })}
       onClick={onToggle}
     >
       <span className="avatar-shop-card-icon">{icon ? <img src={icon} alt="" /> : null}</span>
@@ -128,6 +130,7 @@ export function PetShop({
   onToggleEquip,
   onPickItem,
 }: PetShopProps) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<PetShopTab>("pet");
   const [page, setPage] = useState(0);
   // 搜尋關鍵字；非空時在目前 tab 的清單內模糊搜尋。
@@ -207,7 +210,7 @@ export function PetShop({
   }, [totalPages]);
 
   return (
-    <section className="avatar-shop" aria-label="寵物列表">
+    <section className="avatar-shop" aria-label={t("pet.shop.label")}>
       <div className="avatar-shop-tabs" role="tablist">
         <button
           type="button"
@@ -216,7 +219,7 @@ export function PetShop({
           className={activeTab === "pet" ? "is-active" : ""}
           onClick={() => setActiveTab("pet")}
         >
-          寵物
+          {t("pet.shop.tabPets")}
         </button>
         <button
           type="button"
@@ -225,7 +228,7 @@ export function PetShop({
           className={activeTab === "equip" ? "is-active" : ""}
           onClick={() => setActiveTab("equip")}
         >
-          寵物裝備
+          {t("pet.shop.tabEquips")}
         </button>
       </div>
 
@@ -233,7 +236,7 @@ export function PetShop({
         <input
           type="search"
           value={query}
-          placeholder="模糊搜尋名稱或代碼…"
+          placeholder={t("pet.shop.searchPlaceholder")}
           onChange={(event) => {
             setQuery(event.target.value);
             setPage(0);
@@ -241,11 +244,13 @@ export function PetShop({
         />
         {query.trim() ? (
           <>
-            <span className="avatar-shop-search-count">{shown.length} 件</span>
+            <span className="avatar-shop-search-count">
+              {t("pet.shop.count", { count: shown.length })}
+            </span>
             <button
               type="button"
               className="avatar-shop-search-clear"
-              aria-label="清除搜尋"
+              aria-label={t("common.clearSearch")}
               onClick={() => {
                 setQuery("");
                 setPage(0);
@@ -261,10 +266,10 @@ export function PetShop({
         {pageItems.length === 0 ? (
           <p className="avatar-shop-status">
             {query.trim()
-              ? "找不到符合的項目"
+              ? t("pet.shop.noMatch")
               : activeTab === "equip"
-                ? "此寵物沒有可用的裝備"
-                : "沒有寵物資料"}
+                ? t("pet.shop.noEquips")
+                : t("pet.shop.noPets")}
           </p>
         ) : (
           <div className="avatar-shop-grid" ref={gridRef}>
@@ -294,7 +299,7 @@ export function PetShop({
       </div>
 
       {totalPages > 1 ? (
-        <nav className="avatar-shop-pager" aria-label="寵物分頁">
+        <nav className="avatar-shop-pager" aria-label={t("pet.shop.pagination")}>
           <button
             type="button"
             disabled={currentPage === 0}

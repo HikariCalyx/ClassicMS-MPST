@@ -22,15 +22,17 @@ fn main() {
     ] {
         match svc.get_item_tooltip(path) {
             Ok(Some(tt)) => println!(
-                "{path}\n  => id={} title={} cat={} jobs={:?} attrs={:?} speed={:?} tuc={:?} stats={:?} icon={} desc={:?}\n",
+                "{path}\n  => id={} title={} gender={:?} cat={} weapon={:?} jobs={:?} attrs={:?} speed={:?} tuc={:?} stats={:?} icon={} desc={:?}\n",
                 tt.item_id,
                 tt.title,
-                tt.category_line,
+                tt.req_gender,
+                tt.category,
+                tt.weapon_type,
                 tt.required_jobs,
-                tt.attribute_lines,
-                tt.attack_speed_label,
+                tt.attributes,
+                tt.attack_speed,
                 tt.scroll_count,
-                tt.stat_lines.iter().map(|s| format!("{}{}", s.label, s.value)).collect::<Vec<_>>(),
+                tt.stats.iter().map(|s| format!("{}={}", s.key, s.value)).collect::<Vec<_>>(),
                 tt.icon_base64.map_or(0, |b| b.len()),
                 tt.description,
             ),

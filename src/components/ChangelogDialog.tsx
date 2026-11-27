@@ -1,8 +1,9 @@
 // 更新日誌彈窗：直接解析根目錄的 CHANGELOG.md（build 時以 ?raw 打包進來），
-// 內容維護只需改 CHANGELOG.md 一個地方。
+// 內容維護只需改 CHANGELOG.md 一個地方。條目照原文顯示，只有彈窗外框跟隨介面語言。
 
 import { useEffect } from "react";
 import changelogRaw from "../../CHANGELOG.md?raw";
+import { useI18n } from "../i18n";
 
 interface ChangelogEntry {
   title: string;
@@ -51,6 +52,8 @@ interface ChangelogDialogProps {
 }
 
 export function ChangelogDialog({ open, onClose }: ChangelogDialogProps) {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -68,12 +71,17 @@ export function ChangelogDialog({ open, onClose }: ChangelogDialogProps) {
         className="changelog-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="更新日誌"
+        aria-label={t("browse.changelog.title")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="changelog-dialog-header">
-          <h2>更新日誌</h2>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="關閉">
+          <h2>{t("browse.changelog.title")}</h2>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+          >
             ✕
           </button>
         </header>

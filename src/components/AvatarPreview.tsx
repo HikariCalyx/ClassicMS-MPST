@@ -1,6 +1,7 @@
 import { createDatasetCache } from "../locale";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getImage, type AvatarFrame, type AvatarFrames } from "../api";
+import { useI18n } from "../i18n";
 import {
   buildSequence,
   composeFrame,
@@ -90,6 +91,7 @@ export const AvatarPreview = forwardRef<AvatarPreviewHandle, AvatarPreviewProps>
   { frames, loading, error, playing, active, action },
   ref,
 ) {
+  const { t } = useI18n();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [imageSet, setImageSet] = useState<{
@@ -289,13 +291,13 @@ export const AvatarPreview = forwardRef<AvatarPreviewHandle, AvatarPreviewProps>
 
   const waitingImages = !!frames && !images && !imagesError;
   const status = error
-    ? { text: `角色合成失敗：${error}`, isError: true }
+    ? { text: t("avatar.preview.composeFailed", { error }), isError: true }
     : imagesError
-      ? { text: `貼圖載入失敗：${imagesError}`, isError: true }
+      ? { text: t("avatar.preview.imagesFailed", { error: imagesError }), isError: true }
       : loading || waitingImages
-        ? { text: "正在載入角色貼圖…", isError: false }
+        ? { text: t("avatar.preview.loading"), isError: false }
         : !frames
-          ? { text: "尚無角色資料", isError: false }
+          ? { text: t("avatar.preview.noData"), isError: false }
           : null;
 
   return (
@@ -309,8 +311,8 @@ export const AvatarPreview = forwardRef<AvatarPreviewHandle, AvatarPreviewProps>
       <button
         type="button"
         className="avatar-download-button"
-        title={playing ? "下載動畫（GIF / WebP）" : "下載目前畫面 PNG"}
-        aria-label="下載預覽圖"
+        title={playing ? t("avatar.preview.downloadAnimation") : t("avatar.preview.downloadFrame")}
+        aria-label={t("avatar.preview.download")}
         disabled={!frames || !images}
         onClick={onDownload}
       >
@@ -348,42 +350,42 @@ export const AvatarPreview = forwardRef<AvatarPreviewHandle, AvatarPreviewProps>
             className="avatar-export-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label="下載動畫"
+            aria-label={t("avatar.export.title")}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="changelog-dialog-header">
-              <h2>下載動畫</h2>
+              <h2>{t("avatar.export.title")}</h2>
               <button
                 className="icon-button"
                 type="button"
                 disabled={exporting !== null}
                 onClick={() => setExportDialog(false)}
-                aria-label="關閉"
+                aria-label={t("common.close")}
               >
                 ✕
               </button>
             </header>
             <div className="avatar-export-dialog-content">
-              <p>依目前的動作與表情合成整個循環，選擇要匯出的格式：</p>
+              <p>{t("avatar.export.description")}</p>
               <div className="avatar-export-actions">
                 <button
                   type="button"
                   disabled={exporting !== null}
                   onClick={() => void runExport("gif")}
                 >
-                  {exporting === "gif" ? "匯出中…" : "GIF"}
+                  {exporting === "gif" ? t("common.exporting") : "GIF"}
                 </button>
                 <button
                   type="button"
                   disabled={exporting !== null}
                   onClick={() => void runExport("webp")}
                 >
-                  {exporting === "webp" ? "匯出中…" : "WebP"}
+                  {exporting === "webp" ? t("common.exporting") : "WebP"}
                 </button>
               </div>
               {exportError ? (
                 <p className="avatar-export-error" role="alert">
-                  匯出失敗：{exportError}
+                  {t("common.exportFailed", { error: exportError })}
                 </p>
               ) : null}
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { searchNodes, type SearchHit } from "../api";
+import { useI18n } from "../i18n";
 
 interface SearchBarProps {
   /** 目前選取節點的路徑；非空時只搜該節點內。 */
@@ -9,6 +10,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ scope, onClearScope, onPick }: SearchBarProps) {
+  const { t } = useI18n();
   const listboxId = useId();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchHit[]>([]);
@@ -76,13 +78,13 @@ export function SearchBar({ scope, onClearScope, onPick }: SearchBarProps) {
       {scope ? (
         <div className="tree-search-scope">
           <span className="tree-search-scope-label" title={scope}>
-            範圍：{scope}
+            {t("browse.search.scope", { scope })}
           </span>
           <button
             type="button"
             className="tree-search-scope-clear"
-            aria-label="清除範圍，改為全域搜尋"
-            title="清除範圍，改為全域搜尋"
+            aria-label={t("browse.search.clearScope")}
+            title={t("browse.search.clearScope")}
             onClick={onClearScope}
           >
             ×
@@ -94,26 +96,28 @@ export function SearchBar({ scope, onClearScope, onPick }: SearchBarProps) {
         <input
           type="search"
           role="combobox"
-          aria-label="搜尋資產路徑或名稱"
+          aria-label={t("browse.search.inputLabel")}
           aria-autocomplete="list"
           aria-controls={listboxId}
           aria-expanded={open}
           aria-activedescendant={
             open && results.length > 0 ? `${listboxId}-${activeIndex}` : undefined
           }
-          placeholder="搜尋節點、代碼或道具名稱…"
+          placeholder={t("browse.search.placeholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => query.trim() && setOpen(true)}
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onKeyDown={onInputKeyDown}
         />
-        {searching ? <span className="tree-search-spinner" aria-label="搜尋中" /> : null}
+        {searching ? (
+          <span className="tree-search-spinner" aria-label={t("browse.search.searchingLabel")} />
+        ) : null}
         {query ? (
           <button
             className="tree-search-clear"
             type="button"
-            aria-label="清除搜尋"
+            aria-label={t("common.clearSearch")}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setQuery("")}
           >
@@ -126,10 +130,12 @@ export function SearchBar({ scope, onClearScope, onPick }: SearchBarProps) {
         <div className="tree-search-popover">
           <div className="tree-search-result-summary">
             {searching
-              ? "搜尋中…"
-              : results.length > 0
-                ? `${results.length}${results.length >= 200 ? "+" : ""} 筆結果`
-                : "找不到符合的資產"}
+              ? t("browse.search.searching")
+              : results.length >= 200
+                ? t("browse.search.resultCountCapped", { count: results.length })
+                : results.length > 0
+                  ? t("browse.search.resultCount", { count: results.length })
+                  : t("browse.search.noResults")}
           </div>
           {results.length > 0 ? (
             <div id={listboxId} className="tree-search-results" role="listbox">
@@ -152,7 +158,7 @@ export function SearchBar({ scope, onClearScope, onPick }: SearchBarProps) {
                   >
                     <strong>{result.name ?? name}</strong>
                     <span>
-                      {result.name ? result.path : segments.join("/") || "根目錄"}
+                      {result.name ? result.path : segments.join("/") || t("browse.search.root")}
                     </span>
                   </button>
                 );

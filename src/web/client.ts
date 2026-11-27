@@ -2,12 +2,37 @@
 // 並把 worker 的進度訊息轉發給訂閱者。
 
 import type { ImportProgress } from "../api";
+import { t } from "../i18n";
+import type { WorkerErrorCode } from "./worker";
 
 type ProgressListener = (progress: ImportProgress | null) => void;
 
 interface PendingCall {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
+}
+
+/** Worker 回報的失敗；有 code 的錯誤在主執行緒依介面語言組字（Worker 拿不到使用者選的語言）。 */
+interface FailedCall {
+  id: number;
+  ok: false;
+  error: string;
+  code?: WorkerErrorCode;
+  params?: Record<string, string>;
+}
+
+function failureMessage(failure: FailedCall): string {
+  switch (failure.code) {
+    case "storageBusy":
+      return t("data.error.storageBusy");
+    case "storageFull":
+      return t("data.error.storageFull", {
+        needed: failure.params?.needed ?? "",
+        available: failure.params?.available ?? "",
+      });
+    default:
+      return failure.error;
+  }
 }
 
 let worker: Worker | null = null;
@@ -26,7 +51,7 @@ function getWorker(): Worker {
     const data = event.data as
       | { type: "progress"; progress: ImportProgress }
       | { id: number; ok: true; result: unknown }
-      | { id: number; ok: false; error: string };
+      | FailedCall;
     if ("type" in data && data.type === "progress") {
       emitProgress(data.progress);
       return;
@@ -36,10 +61,10 @@ function getWorker(): Worker {
     if (!call) return;
     pending.delete(data.id);
     if (data.ok) call.resolve(data.result);
-    else call.reject(new Error(data.error));
+    else call.reject(new Error(failureMessage(data)));
   };
   instance.onerror = (event) => {
-    const error = new Error(event.message || "Worker 發生未攔截的錯誤");
+    const error = new Error(event.message || t("data.error.workerCrashed"));
     for (const call of pending.values()) call.reject(error);
     pending.clear();
   };

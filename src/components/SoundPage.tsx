@@ -28,6 +28,7 @@ import {
   type BgmMapRef,
   type ChildEntry,
 } from "../api";
+import { useI18n } from "../i18n";
 
 // BGM 音樂播放器：左播放清單（Bgm* 分類）/ 中曲目表 / 右「使用地圖」欄 /
 // 下固定播放列（Spotify 風格）。曲目清單用既有 listChildren，音訊用既有
@@ -45,6 +46,12 @@ interface BgmTrack {
 }
 
 type LoopMode = "all" | "one" | "off";
+
+/** 曲目載入/播放錯誤：只存發生階段與原始訊息，顯示文字在渲染時依介面語言組成。 */
+interface TrackError {
+  stage: "load" | "play";
+  message: string;
+}
 
 /** 側欄「全部 BGM」虛擬分類的 key。 */
 const ALL_CATEGORY = "__all__";
@@ -106,6 +113,7 @@ function loadMiniMapThumb(imgPath: string): Promise<string | null> {
 
 /** 右欄「使用此 BGM 的地圖」一列：miniMap 縮圖（缺圖用 MapPin 圖示）+ 名稱 + id。 */
 function MapUsageRow({ map }: { map: BgmMapRef }) {
+  const { t } = useI18n();
   const [thumb, setThumb] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -126,7 +134,7 @@ function MapUsageRow({ map }: { map: BgmMapRef }) {
         </span>
       )}
       <div className="sound-map-text">
-        <span className="sound-map-name">{map.name ?? "（無地圖名稱）"}</span>
+        <span className="sound-map-name">{map.name ?? t("sound.maps.noName")}</span>
         <span className="sound-map-id">{String(map.mapId).padStart(9, "0")}</span>
       </div>
     </div>
@@ -141,6 +149,7 @@ export function SoundPage({
   /** 選取/播放曲目時回報節點路徑（給 App footer 麵包屑）。 */
   onPickSound?: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<BgmCategory[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY);
@@ -159,7 +168,7 @@ export function SoundPage({
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [durations, setDurations] = useState<Map<string, number>>(new Map());
-  const [trackError, setTrackError] = useState<string | null>(null);
+  const [trackError, setTrackError] = useState<TrackError | null>(null);
   // 「bgm 值（如 Bgm00/FloralLife）→ 使用地圖清單」；null = 尚未載入完成。
   const [bgmIndex, setBgmIndex] = useState<Map<string, BgmMapRef[]> | null>(null);
 
@@ -221,13 +230,13 @@ export function SoundPage({
           audio.src = url;
           audio.play().catch((error: unknown) => {
             if (generation === playGenerationRef.current) {
-              setTrackError(`播放失敗：${String(error)}`);
+              setTrackError({ stage: "play", message: String(error) });
             }
           });
         })
         .catch((error: unknown) => {
           if (generation === playGenerationRef.current) {
-            setTrackError(`載入失敗：${String(error)}`);
+            setTrackError({ stage: "load", message: String(error) });
           }
         });
     },
@@ -464,33 +473,38 @@ export function SoundPage({
   if (loadError) {
     return (
       <div className="sound-page" hidden={!visible}>
-        <p className="sound-page-status">音效清單載入失敗：{loadError}</p>
+        <p className="sound-page-status">{t("sound.loadFailed", { error: loadError })}</p>
       </div>
     );
   }
   if (!categories) {
     return (
       <div className="sound-page" hidden={!visible}>
-        <p className="sound-page-status">正在載入音效清單…</p>
+        <p className="sound-page-status">{t("sound.loading")}</p>
       </div>
     );
   }
 
   const mainTitle = query.trim()
-    ? "搜尋結果"
+    ? t("sound.search.results")
     : selectedCategory === ALL_CATEGORY
-      ? "全部 BGM"
+      ? t("sound.sidebar.all")
       : selectedCategory;
+  const trackErrorText = trackError
+    ? trackError.stage === "play"
+      ? t("sound.player.playFailed", { error: trackError.message })
+      : t("sound.player.loadFailed", { error: trackError.message })
+    : null;
 
   return (
     <div className="sound-page" hidden={!visible}>
-      <aside className="sound-sidebar" aria-label="BGM 分類">
+      <aside className="sound-sidebar" aria-label={t("sound.sidebar.label")}>
         <div className="sound-search">
           <input
             type="search"
             value={query}
-            placeholder="搜尋曲名、分類或地圖…"
-            aria-label="搜尋 BGM"
+            placeholder={t("sound.search.placeholder")}
+            aria-label={t("sound.search.label")}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -504,7 +518,7 @@ export function SoundPage({
             }}
           >
             <Music aria-hidden="true" size={14} strokeWidth={2.25} />
-            <span className="sound-playlist-name">全部 BGM</span>
+            <span className="sound-playlist-name">{t("sound.sidebar.all")}</span>
             <span className="sound-playlist-count">{allTracks.length}</span>
           </button>
           {categories.map((cat) => (
@@ -527,19 +541,21 @@ export function SoundPage({
         </div>
       </aside>
 
-      <section className="sound-main" aria-label="曲目列表">
+      <section className="sound-main" aria-label={t("sound.tracks.label")}>
         <header className="sound-main-header">
           <h2>{mainTitle}</h2>
           <span className="sound-main-count">
-            {loadingTracks ? "載入中…" : `${displayedTracks.length} 首`}
+            {loadingTracks
+              ? t("common.loading")
+              : t("sound.tracks.count", { count: displayedTracks.length })}
           </span>
         </header>
         <div className="sound-tracklist" role="list">
           <div className="sound-track-row is-head" aria-hidden="true">
             <span className="sound-track-index">#</span>
-            <span className="sound-track-title">曲名</span>
-            <span className="sound-track-category">分類</span>
-            <span className="sound-track-duration">時長</span>
+            <span className="sound-track-title">{t("sound.tracks.title")}</span>
+            <span className="sound-track-category">{t("sound.tracks.category")}</span>
+            <span className="sound-track-duration">{t("sound.tracks.duration")}</span>
           </div>
           {displayedTracks.map((track, index) => {
             const isCurrent = currentTrack?.path === track.path;
@@ -576,14 +592,14 @@ export function SoundPage({
             );
           })}
           {!loadingTracks && displayedTracks.length === 0 ? (
-            <p className="sound-track-empty">沒有符合的曲目</p>
+            <p className="sound-track-empty">{t("sound.tracks.empty")}</p>
           ) : null}
         </div>
       </section>
 
-      <aside className="sound-nowplaying" aria-label="使用此 BGM 的地圖">
+      <aside className="sound-nowplaying" aria-label={t("sound.maps.title")}>
         <header className="sound-nowplaying-header">
-          <h3>使用此 BGM 的地圖</h3>
+          <h3>{t("sound.maps.title")}</h3>
           {currentTrack ? (
             <span className="sound-nowplaying-track">
               {currentTrack.title}
@@ -593,10 +609,10 @@ export function SoundPage({
         </header>
         <div className="sound-nowplaying-body">
           {!currentTrack ? (
-            <p className="sound-nowplaying-empty">從清單選一首 BGM，這裡會列出使用它的地圖</p>
+            <p className="sound-nowplaying-empty">{t("sound.maps.prompt")}</p>
           ) : currentMaps == null ? (
             <p className="sound-nowplaying-empty">
-              {bgmIndex == null ? "地圖索引載入中…" : "沒有地圖使用這首 BGM"}
+              {bgmIndex == null ? t("sound.maps.indexLoading") : t("sound.maps.none")}
             </p>
           ) : (
             currentMaps.map((map) => <MapUsageRow key={map.mapId} map={map} />)
@@ -604,17 +620,18 @@ export function SoundPage({
         </div>
       </aside>
 
-      <footer className="sound-playerbar" aria-label="播放器">
+      <footer className="sound-playerbar" aria-label={t("sound.player.label")}>
         <div className="sound-player-info">
           <span className="sound-player-cover" aria-hidden="true">
             <Music size={18} strokeWidth={2} />
           </span>
           <div className="sound-player-text">
             <span className="sound-player-title">
-              {currentTrack ? currentTrack.title : "未播放"}
+              {currentTrack ? currentTrack.title : t("sound.player.idle")}
             </span>
             <span className="sound-player-category">
-              {trackError ?? (currentTrack ? currentTrack.category : "從清單選一首 BGM 開始試聽")}
+              {trackErrorText ??
+                (currentTrack ? currentTrack.category : t("sound.player.prompt"))}
             </span>
           </div>
         </div>
@@ -623,8 +640,8 @@ export function SoundPage({
             <button
               type="button"
               className={`sound-player-button${shuffle ? " is-active" : ""}`}
-              title={shuffle ? "關閉隨機播放" : "隨機播放"}
-              aria-label={shuffle ? "關閉隨機播放" : "隨機播放"}
+              title={shuffle ? t("sound.player.shuffleOff") : t("sound.player.shuffle")}
+              aria-label={shuffle ? t("sound.player.shuffleOff") : t("sound.player.shuffle")}
               aria-pressed={shuffle}
               onClick={() => setShuffle((on) => !on)}
             >
@@ -633,8 +650,8 @@ export function SoundPage({
             <button
               type="button"
               className="sound-player-button"
-              title="上一首"
-              aria-label="上一首"
+              title={t("sound.player.previous")}
+              aria-label={t("sound.player.previous")}
               onClick={() => stepTrack(-1)}
             >
               <SkipBack aria-hidden="true" size={16} />
@@ -642,8 +659,8 @@ export function SoundPage({
             <button
               type="button"
               className="sound-player-button is-primary"
-              title={playing ? "暫停" : "播放"}
-              aria-label={playing ? "暫停" : "播放"}
+              title={playing ? t("common.pause") : t("common.play")}
+              aria-label={playing ? t("common.pause") : t("common.play")}
               onClick={togglePlay}
             >
               {playing ? (
@@ -655,8 +672,8 @@ export function SoundPage({
             <button
               type="button"
               className="sound-player-button"
-              title="下一首"
-              aria-label="下一首"
+              title={t("sound.player.next")}
+              aria-label={t("sound.player.next")}
               onClick={() => stepTrack(1)}
             >
               <SkipForward aria-hidden="true" size={16} />
@@ -664,14 +681,8 @@ export function SoundPage({
             <button
               type="button"
               className={`sound-player-button${loopMode !== "off" ? " is-active" : ""}`}
-              title={
-                loopMode === "all"
-                  ? "列表循環（點擊切換單曲循環）"
-                  : loopMode === "one"
-                    ? "單曲循環（點擊關閉循環）"
-                    : "循環關閉（點擊開啟列表循環）"
-              }
-              aria-label="循環模式"
+              title={t(`sound.loop.${loopMode}`)}
+              aria-label={t("sound.player.loopMode")}
               onClick={cycleLoop}
             >
               {loopMode === "one" ? (
@@ -691,7 +702,7 @@ export function SoundPage({
               step={0.1}
               value={Math.min(currentTime, currentDuration ?? 0)}
               disabled={!currentTrack || currentDuration == null}
-              aria-label="播放進度"
+              aria-label={t("sound.player.seek")}
               style={{
                 background: `linear-gradient(to right, var(--accent) ${
                   currentDuration ? (Math.min(currentTime, currentDuration) / currentDuration) * 100 : 0
@@ -708,8 +719,8 @@ export function SoundPage({
           <button
             type="button"
             className="sound-player-button"
-            title={muted ? "取消靜音" : "靜音"}
-            aria-label={muted ? "取消靜音" : "靜音"}
+            title={muted ? t("sound.player.unmute") : t("sound.player.mute")}
+            aria-label={muted ? t("sound.player.unmute") : t("sound.player.mute")}
             onClick={() => setMuted((on) => !on)}
           >
             {muted || volume === 0 ? (
@@ -724,8 +735,10 @@ export function SoundPage({
             min={0}
             max={100}
             value={muted ? 0 : Math.round(volume * 100)}
-            aria-label="音量"
-            title={`音量：${muted ? 0 : Math.round(volume * 100)}%`}
+            aria-label={t("sound.player.volume")}
+            title={t("sound.player.volumeValue", {
+              percent: muted ? 0 : Math.round(volume * 100),
+            })}
             onChange={(event) => {
               setMuted(false);
               setVolume(Number(event.target.value) / 100);

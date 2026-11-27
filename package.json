@@ -1,7 +1,7 @@
 {
   "name": "msclassic-viewer",
   "private": true,
-  "version": "0.34.1",
+  "version": "0.34.3",
   "description": "新楓之谷：經典版 Unity 資料瀏覽、圖片預覽與 JSON/PNG/XML 匯出工具",
   "type": "module",
   "scripts": {

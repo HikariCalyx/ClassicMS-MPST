@@ -19,6 +19,7 @@ import type {
 } from "../api.hosted";
 import { cmpNodeNames, DATA_ROOT, fetchChecked, loadTextAsset, loadTree } from "./core";
 import type { TreeNode } from "./core";
+import { t } from "../i18n";
 import { loadItemNameTable } from "./tooltip";
 
 // ---------------------------------------------------------------------------
@@ -319,7 +320,7 @@ export async function getQuestDetail(questId: string): Promise<QuestDetail> {
   const checkEntry = findQuestNode(checkTree, questId);
   const actEntry = findQuestNode(actTree, questId);
   if (!sayEntry && !checkEntry && !actEntry) {
-    throw new Error(`找不到任務：${questId}`);
+    throw new Error(t("data.error.questNotFound", { id: questId }));
   }
 
   const strings = questData.get(normalizeId(questId)) ?? questData.get(questId) ?? null;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { exportFile, openExternal, pickExportPath, type ExportFormat } from "../api";
+import { useI18n } from "../i18n";
 
 const DISCORD_INVITE_URL = "https://discord.gg/BnnAympQZW";
 
@@ -7,28 +8,30 @@ interface ExportMenuProps {
   canExportPng: boolean;
   nodeName: string | null;
   path: string | null;
+  /** 匯出結果（已依介面語言組好的訊息），App 以 toast 顯示。 */
   onMessage: (message: string, tone?: "success" | "error") => void;
   onShowChangelog: () => void;
 }
 
-interface ExportOption {
-  description: string;
-  extension: ExportFormat;
-  label: string;
-}
-
-const EXPORT_OPTIONS: ExportOption[] = [
-  { extension: "json", label: "JSON 資料", description: "匯出目前節點與完整子樹" },
-  { extension: "png", label: "PNG 圖片", description: "匯出目前節點的解析圖片" },
-  { extension: "xml", label: "XML 資料", description: "匯出完整子樹，不包含圖片" },
-];
+// 匯出選項以副檔名為代碼；標籤與說明在渲染時依介面語言取
+// browse.export.<副檔名>Label / browse.export.<副檔名>Description。
+const EXPORT_OPTIONS: readonly ExportFormat[] = ["json", "png", "xml"];
 
 function safeFileName(value: string): string {
   const sanitized = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
   return sanitized || "export";
 }
 
+/**
+ * 匯出節點數的 {count} 參數：1,000 以上傳千分位字串（與原本 toLocaleString 的顯示一致）；
+ * 以下傳數字，英文才會在 1 個節點時改用單數。
+ */
+function nodeCountParam(nodes: number): number | string {
+  return nodes < 1000 ? nodes : nodes.toLocaleString();
+}
+
 export function ExportMenu({ canExportPng, nodeName, path, onMessage, onShowChangelog }: ExportMenuProps) {
+  const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
@@ -48,32 +51,38 @@ export function ExportMenu({ canExportPng, nodeName, path, onMessage, onShowChan
     };
   }, []);
 
-  const runExport = async (option: ExportOption) => {
+  const formatLabel = (extension: ExportFormat) => t(`browse.export.${extension}Label`);
+
+  const runExport = async (extension: ExportFormat) => {
     if (!path || exporting) return;
     setOpen(false);
     try {
       const outputPath = await pickExportPath({
-        title: `匯出 ${option.label}`,
-        defaultName: `${safeFileName(nodeName ?? path.split("/").at(-1) ?? "export")}.${option.extension}`,
-        label: option.label,
-        extension: option.extension,
+        title: t("browse.export.dialogTitle", { label: formatLabel(extension) }),
+        defaultName: `${safeFileName(nodeName ?? path.split("/").at(-1) ?? "export")}.${extension}`,
+        label: formatLabel(extension),
+        extension,
       });
       if (!outputPath) return;
-      setExporting(option.extension);
-      const result = await exportFile(path, option.extension, outputPath);
+      setExporting(extension);
+      const result = await exportFile(path, extension, outputPath);
       onMessage(
-        `已匯出 ${option.label}（${result.nodes.toLocaleString()} 個節點）→ ${result.out_path}`,
+        t("browse.export.done", {
+          label: formatLabel(extension),
+          count: nodeCountParam(result.nodes),
+          path: result.out_path,
+        }),
         "success",
       );
     } catch (error) {
-      onMessage(`匯出失敗：${String(error)}`, "error");
+      onMessage(t("common.exportFailed", { error: String(error) }), "error");
     } finally {
       setExporting(null);
     }
   };
 
   return (
-    <nav className="app-menu-bar" aria-label="應用程式選單">
+    <nav className="app-menu-bar" aria-label={t("browse.menu.label")}>
       <div className={`app-menu-group${open ? " is-open" : ""}`} ref={menuRef}>
         <button
           className="app-menu-trigger"
@@ -82,33 +91,33 @@ export function ExportMenu({ canExportPng, nodeName, path, onMessage, onShowChan
           aria-expanded={open}
           onClick={() => setOpen((current) => !current)}
         >
-          匯出
+          {t("browse.export.menu")}
         </button>
         {open ? (
           <div className="app-menu-dropdown" role="menu">
-            {EXPORT_OPTIONS.map((option) => (
+            {EXPORT_OPTIONS.map((extension) => (
               <button
                 className="app-menu-item"
                 type="button"
                 role="menuitem"
-                key={option.extension}
-                disabled={
-                  !path || exporting !== null || (option.extension === "png" && !canExportPng)
-                }
-                onClick={() => void runExport(option)}
+                key={extension}
+                disabled={!path || exporting !== null || (extension === "png" && !canExportPng)}
+                onClick={() => void runExport(extension)}
               >
-                <span className={`export-format-icon is-${option.extension}`} aria-hidden="true">
-                  {option.extension.toUpperCase()}
+                <span className={`export-format-icon is-${extension}`} aria-hidden="true">
+                  {extension.toUpperCase()}
                 </span>
                 <span>
                   <strong>
-                    {exporting === option.extension ? "匯出中…" : `匯出為 ${option.label}`}
+                    {exporting === extension
+                      ? t("common.exporting")
+                      : t("browse.export.as", { label: formatLabel(extension) })}
                   </strong>
-                  <small>{option.description}</small>
+                  <small>{t(`browse.export.${extension}Description`)}</small>
                 </span>
               </button>
             ))}
-            {!path ? <p className="app-menu-hint">請先選擇一個資料節點</p> : null}
+            {!path ? <p className="app-menu-hint">{t("browse.export.needNode")}</p> : null}
           </div>
         ) : null}
       </div>
@@ -117,10 +126,10 @@ export function ExportMenu({ canExportPng, nodeName, path, onMessage, onShowChan
         type="button"
         onClick={() => void openExternal(DISCORD_INVITE_URL)}
       >
-        加入 Discord
+        {t("browse.menu.discord")}
       </button>
       <button className="app-menu-trigger" type="button" onClick={onShowChangelog}>
-        更新日誌
+        {t("browse.menu.changelog")}
       </button>
     </nav>
   );
